@@ -17,9 +17,9 @@ jobs:
       - name: Deploy to FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
+          server: w01c3400.kasserver.com
+          username: f0180e2d
+          password: MN7-=Y3oJAxFHX/bqncP
           server-dir: /
           protocol: ftps
           port: 21
