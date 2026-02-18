@@ -251,13 +251,10 @@ try {
         case 'save-page-design':
             requirePost($method);
             $input = getJsonInput();
-            $design = [
-                'header_image' => trim($input['header_image'] ?? ''),
-                'profile_image' => trim($input['profile_image'] ?? ''),
-                'welcome_title' => trim($input['welcome_title'] ?? ''),
-                'welcome_text' => trim($input['welcome_text'] ?? ''),
-                'booking_info' => trim($input['booking_info'] ?? ''),
-            ];
+            $design = $cm->getSection('page_design') ?: [];
+            $design['welcome_title'] = trim($input['welcome_title'] ?? '');
+            $design['welcome_text'] = trim($input['welcome_text'] ?? '');
+            $design['booking_info'] = trim($input['booking_info'] ?? '');
             $cm->saveSection('page_design', $design);
             jsonResponse(['success' => true]);
             break;
