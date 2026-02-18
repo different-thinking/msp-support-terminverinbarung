@@ -187,6 +187,13 @@ class ConfigManager
                 'name' => '',
                 'email' => '',
             ],
+            'page_design' => [
+                'header_image' => '',
+                'profile_image' => '',
+                'welcome_title' => '',
+                'welcome_text' => '',
+                'booking_info' => '',
+            ],
             'admin' => [
                 'password_hash' => '',
             ],

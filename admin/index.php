@@ -96,6 +96,9 @@ foreach ($config['calendar_sources'] as $src) {
             <a href="#" class="nav-item active" data-tab="general">
                 <span class="nav-icon">&#9881;</span> Allgemein
             </a>
+            <a href="#" class="nav-item" data-tab="design">
+                <span class="nav-icon">&#127912;</span> Seitendesign
+            </a>
             <a href="#" class="nav-item" data-tab="organizer">
                 <span class="nav-icon">&#128100;</span> Organisator
             </a>
@@ -215,6 +218,87 @@ foreach ($config['calendar_sources'] as $src) {
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== Tab: Seitendesign ==================== -->
+        <section id="tab-design" class="tab-content">
+            <div class="tab-header">
+                <h1>Seitendesign</h1>
+                <p>Header-Bild, Profilbild und Texte der Buchungsseite anpassen</p>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">Header-Bild</h3>
+                <p class="text-muted" style="margin-bottom:12px;">Wird als Banner oben auf der Buchungsseite angezeigt (empfohlen: 1200 x 300 px)</p>
+                <div class="image-upload-area" id="header-image-area">
+                    <?php $headerImg = $config['page_design']['header_image'] ?? ''; ?>
+                    <?php if ($headerImg): ?>
+                        <div class="image-preview" id="header-image-preview">
+                            <img src="../<?= htmlspecialchars($headerImg) ?>" alt="Header">
+                            <button type="button" class="btn-remove-image" data-field="header_image" title="Bild entfernen">&times;</button>
+                        </div>
+                    <?php else: ?>
+                        <div class="image-preview" id="header-image-preview" style="display:none;">
+                            <img src="" alt="Header">
+                            <button type="button" class="btn-remove-image" data-field="header_image" title="Bild entfernen">&times;</button>
+                        </div>
+                    <?php endif; ?>
+                    <label class="image-upload-btn" <?= $headerImg ? 'style="display:none;"' : '' ?> id="header-image-upload-label">
+                        <input type="file" accept="image/*" data-field="header_image" class="image-upload-input" style="display:none;">
+                        <span>Bild hochladen</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">Profilbild</h3>
+                <p class="text-muted" style="margin-bottom:12px;">Wird neben Ihrem Namen angezeigt (empfohlen: 200 x 200 px, quadratisch)</p>
+                <div class="image-upload-area" id="profile-image-area">
+                    <?php $profileImg = $config['page_design']['profile_image'] ?? ''; ?>
+                    <?php if ($profileImg): ?>
+                        <div class="image-preview profile-preview" id="profile-image-preview">
+                            <img src="../<?= htmlspecialchars($profileImg) ?>" alt="Profil">
+                            <button type="button" class="btn-remove-image" data-field="profile_image" title="Bild entfernen">&times;</button>
+                        </div>
+                    <?php else: ?>
+                        <div class="image-preview profile-preview" id="profile-image-preview" style="display:none;">
+                            <img src="" alt="Profil">
+                            <button type="button" class="btn-remove-image" data-field="profile_image" title="Bild entfernen">&times;</button>
+                        </div>
+                    <?php endif; ?>
+                    <label class="image-upload-btn" <?= $profileImg ? 'style="display:none;"' : '' ?> id="profile-image-upload-label">
+                        <input type="file" accept="image/*" data-field="profile_image" class="image-upload-input" style="display:none;">
+                        <span>Bild hochladen</span>
+                    </label>
+                </div>
+            </div>
+
+            <form id="form-page-design" class="admin-card">
+                <h3 class="card-section-title">Texte</h3>
+                <p class="text-muted" style="margin-bottom:12px;">Diese Texte erscheinen auf der Buchungsseite</p>
+                <div class="form-group">
+                    <label for="design-welcome-title">Begrüßungstitel</label>
+                    <input type="text" id="design-welcome-title"
+                           value="<?= htmlspecialchars($config['page_design']['welcome_title'] ?? '') ?>"
+                           placeholder="z.B. Willkommen bei meiner Terminbuchung">
+                    <div class="form-hint">Wird unter dem Profilbild angezeigt. Leer lassen für Standardtext.</div>
+                </div>
+                <div class="form-group">
+                    <label for="design-welcome-text">Beschreibungstext</label>
+                    <textarea id="design-welcome-text" rows="3"
+                              placeholder="z.B. Buchen Sie einen Beratungstermin – ich freue mich auf unser Gespräch."><?= htmlspecialchars($config['page_design']['welcome_text'] ?? '') ?></textarea>
+                    <div class="form-hint">Kurze Beschreibung unter dem Begrüßungstitel</div>
+                </div>
+                <div class="form-group">
+                    <label for="design-booking-info">Zusatzinfo bei der Terminauswahl</label>
+                    <textarea id="design-booking-info" rows="2"
+                              placeholder="z.B. Wählen Sie einen passenden Termin aus meinem Kalender."><?= htmlspecialchars($config['page_design']['booking_info'] ?? '') ?></textarea>
+                    <div class="form-hint">Wird im Kalender-Bereich angezeigt (optional)</div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Texte speichern</button>
                 </div>
             </form>
         </section>

@@ -43,22 +43,84 @@ body {
     padding: 40px 20px;
 }
 
+/* Header Banner */
+.header-banner {
+    width: 100%;
+    max-height: 280px;
+    overflow: hidden;
+    background: var(--gray-200);
+}
+
+.header-banner img {
+    width: 100%;
+    height: 280px;
+    object-fit: cover;
+    display: block;
+}
+
+.container.has-banner {
+    padding-top: 0;
+}
+
 /* Header */
 .app-header {
     text-align: center;
     margin-bottom: 40px;
+    padding-top: 24px;
+}
+
+.has-banner .app-header {
+    margin-top: -48px;
+    position: relative;
+    z-index: 1;
+}
+
+.profile-section {
+    margin-bottom: 16px;
+}
+
+.profile-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 4px solid white;
+    box-shadow: var(--shadow-lg);
+    background: white;
+}
+
+.has-banner .profile-avatar {
+    width: 104px;
+    height: 104px;
 }
 
 .app-header h1 {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--gray-900);
+    margin-bottom: 4px;
+}
+
+.organizer-name {
+    color: var(--primary);
+    font-size: 15px;
+    font-weight: 500;
     margin-bottom: 8px;
 }
 
-.app-header p {
+.welcome-text {
     color: var(--gray-500);
-    font-size: 16px;
+    font-size: 15px;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.5;
+}
+
+.booking-info-text {
+    color: var(--gray-500);
+    font-size: 14px;
+    margin-bottom: 20px;
+    line-height: 1.5;
 }
 
 /* Booking Steps */
@@ -605,8 +667,30 @@ body {
 
 /* Responsive */
 @media (max-width: 640px) {
+    .header-banner {
+        max-height: 180px;
+    }
+
+    .header-banner img {
+        height: 180px;
+    }
+
     .container {
         padding: 20px 16px;
+    }
+
+    .profile-avatar {
+        width: 80px;
+        height: 80px;
+    }
+
+    .has-banner .profile-avatar {
+        width: 88px;
+        height: 88px;
+    }
+
+    .app-header h1 {
+        font-size: 20px;
     }
 
     .booking-panel {

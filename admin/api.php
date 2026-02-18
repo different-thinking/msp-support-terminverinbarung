@@ -247,6 +247,87 @@ try {
             jsonResponse(['status' => $status]);
             break;
 
+        // ==================== Seitendesign ====================
+        case 'save-page-design':
+            requirePost($method);
+            $input = getJsonInput();
+            $design = [
+                'header_image' => trim($input['header_image'] ?? ''),
+                'profile_image' => trim($input['profile_image'] ?? ''),
+                'welcome_title' => trim($input['welcome_title'] ?? ''),
+                'welcome_text' => trim($input['welcome_text'] ?? ''),
+                'booking_info' => trim($input['booking_info'] ?? ''),
+            ];
+            $cm->saveSection('page_design', $design);
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'upload-image':
+            requirePost($method);
+            $field = $_POST['field'] ?? '';
+            if (!in_array($field, ['header_image', 'profile_image'])) {
+                jsonResponse(['error' => 'Ungültiges Feld'], 400);
+            }
+            if (empty($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+                jsonResponse(['error' => 'Kein Bild hochgeladen'], 400);
+            }
+            $file = $_FILES['image'];
+            $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+            if (!in_array($mime, $allowed)) {
+                jsonResponse(['error' => 'Nur JPG, PNG, WebP und GIF erlaubt'], 400);
+            }
+            if ($file['size'] > 5 * 1024 * 1024) {
+                jsonResponse(['error' => 'Maximale Dateigröße: 5 MB'], 400);
+            }
+            $ext = match ($mime) {
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/webp' => 'webp',
+                'image/gif' => 'gif',
+                default => 'jpg',
+            };
+            $filename = $field . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            $uploadDir = dirname(__DIR__) . '/assets/uploads/';
+            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+
+            // Altes Bild löschen
+            $design = $cm->getSection('page_design') ?: [];
+            $oldPath = $design[$field] ?? '';
+            if ($oldPath && file_exists(dirname(__DIR__) . '/' . $oldPath)) {
+                unlink(dirname(__DIR__) . '/' . $oldPath);
+            }
+
+            $destPath = $uploadDir . $filename;
+            if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+                jsonResponse(['error' => 'Upload fehlgeschlagen'], 500);
+            }
+
+            $relativePath = 'assets/uploads/' . $filename;
+            $design[$field] = $relativePath;
+            $cm->saveSection('page_design', $design);
+            jsonResponse(['success' => true, 'path' => $relativePath]);
+            break;
+
+        case 'delete-image':
+            requirePost($method);
+            $input = getJsonInput();
+            $field = $input['field'] ?? '';
+            if (!in_array($field, ['header_image', 'profile_image'])) {
+                jsonResponse(['error' => 'Ungültiges Feld'], 400);
+            }
+            $design = $cm->getSection('page_design') ?: [];
+            $oldPath = $design[$field] ?? '';
+            if ($oldPath && file_exists(dirname(__DIR__) . '/' . $oldPath)) {
+                unlink(dirname(__DIR__) . '/' . $oldPath);
+            }
+            $design[$field] = '';
+            $cm->saveSection('page_design', $design);
+            jsonResponse(['success' => true]);
+            break;
+
         // ==================== Admin-Passwort ====================
         case 'save-password':
             requirePost($method);

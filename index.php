@@ -9,6 +9,12 @@ $additionalFields = $config['booking_form']['additional_fields'];
 $allowAttendees = $config['booking_form']['allow_additional_attendees'];
 $maxAttendees = $config['booking_form']['max_additional_attendees'];
 $organizerName = $config['organizer']['name'];
+$design = $config['page_design'] ?? [];
+$headerImage = $design['header_image'] ?? '';
+$profileImage = $design['profile_image'] ?? '';
+$welcomeTitle = $design['welcome_title'] ?? '';
+$welcomeText = $design['welcome_text'] ?? '';
+$bookingInfo = $design['booking_info'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="de">
@@ -20,10 +26,26 @@ $organizerName = $config['organizer']['name'];
 </head>
 <body data-duration="<?= $duration ?>">
 
-<div class="container">
+<?php if ($headerImage): ?>
+<div class="header-banner">
+    <img src="<?= htmlspecialchars($headerImage) ?>" alt="<?= htmlspecialchars($appName) ?>">
+</div>
+<?php endif; ?>
+
+<div class="container <?= $headerImage ? 'has-banner' : '' ?>">
     <header class="app-header">
-        <h1><?= htmlspecialchars($appName) ?></h1>
-        <p>Buchen Sie einen <?= $duration ?>-Minuten-Termin mit <?= htmlspecialchars($organizerName) ?></p>
+        <?php if ($profileImage): ?>
+        <div class="profile-section">
+            <img src="<?= htmlspecialchars($profileImage) ?>" alt="<?= htmlspecialchars($organizerName) ?>" class="profile-avatar">
+        </div>
+        <?php endif; ?>
+        <h1><?= htmlspecialchars($welcomeTitle ?: $appName) ?></h1>
+        <p class="organizer-name"><?= htmlspecialchars($organizerName) ?></p>
+        <?php if ($welcomeText): ?>
+        <p class="welcome-text"><?= nl2br(htmlspecialchars($welcomeText)) ?></p>
+        <?php else: ?>
+        <p class="welcome-text">Buchen Sie einen <?= $duration ?>-Minuten-Termin</p>
+        <?php endif; ?>
     </header>
 
     <!-- Schrittanzeige -->
@@ -47,6 +69,9 @@ $organizerName = $config['organizer']['name'];
     <!-- Schritt 1: Kalender & Zeitslots -->
     <div id="panel-calendar" class="booking-panel active">
         <h2 class="panel-title">Wählen Sie Datum und Uhrzeit</h2>
+        <?php if ($bookingInfo): ?>
+        <p class="booking-info-text"><?= nl2br(htmlspecialchars($bookingInfo)) ?></p>
+        <?php endif; ?>
 
         <div class="calendar-container">
             <div class="calendar-nav">
