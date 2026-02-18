@@ -289,13 +289,13 @@ foreach ($config['calendar_sources'] as $src) {
                     <label for="design-welcome-text">Beschreibungstext</label>
                     <textarea id="design-welcome-text" rows="3"
                               placeholder="z.B. Buchen Sie einen Beratungstermin – ich freue mich auf unser Gespräch."><?= htmlspecialchars($config['page_design']['welcome_text'] ?? '') ?></textarea>
-                    <div class="form-hint">Kurze Beschreibung unter dem Begrüßungstitel</div>
+                    <div class="form-hint">Kurze Beschreibung unter dem Begrüßungstitel. Für <strong>fett</strong> schreiben Sie **text**</div>
                 </div>
                 <div class="form-group">
                     <label for="design-booking-info">Zusatzinfo bei der Terminauswahl</label>
                     <textarea id="design-booking-info" rows="2"
                               placeholder="z.B. Wählen Sie einen passenden Termin aus meinem Kalender."><?= htmlspecialchars($config['page_design']['booking_info'] ?? '') ?></textarea>
-                    <div class="form-hint">Wird im Kalender-Bereich angezeigt (optional)</div>
+                    <div class="form-hint">Wird im Kalender-Bereich angezeigt (optional). Für <strong>fett</strong> schreiben Sie **text**</div>
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Texte speichern</button>

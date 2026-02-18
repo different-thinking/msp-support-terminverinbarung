@@ -111,7 +111,6 @@ body {
 .welcome-text {
     color: var(--gray-500);
     font-size: 15px;
-    max-width: 500px;
     margin: 0 auto;
     line-height: 1.5;
 }
