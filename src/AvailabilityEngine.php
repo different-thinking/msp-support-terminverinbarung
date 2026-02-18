@@ -87,7 +87,9 @@ class AvailabilityEngine
 
     /**
      * Gibt verfügbare Tage in einem Monat zurück (hat mindestens einen freien Slot).
-     * @return array ['2024-01-15' => true, '2024-01-16' => true, ...]
+     * Optimiert: Busy-Slots werden einmal für den gesamten Monat abgefragt
+     * statt für jeden Tag einzeln (1 API-Call statt ~30).
+     * @return array ['2024-01-15' => 5, '2024-01-16' => 3, ...]
      */
     public function getAvailableDays(int $year, int $month): array
     {
@@ -96,10 +98,78 @@ class AvailabilityEngine
 
         $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
 
+        // Busy-Slots einmal für den gesamten Monat abrufen
+        $monthStart = new \DateTime("{$year}-{$month}-01 00:00:00", $tz);
+        $monthEnd = clone $monthStart;
+        $monthEnd->modify("+{$daysInMonth} days");
+
+        $allBusySlots = $this->collectBusySlots($monthStart, $monthEnd);
+
+        // Pausenzeiten vorbereiten (werden pro Tag genutzt)
+        $breakTime = $this->config['break_time'] ?? null;
+        $breakEnabled = $breakTime && !empty($breakTime['enabled']);
+
+        // Mindestvorlaufzeit einmal berechnen
+        $now = new \DateTime('now', $tz);
+        $minNotice = clone $now;
+        $minNotice->modify('+' . $this->config['app']['min_notice_hours'] . ' hours');
+
         for ($day = 1; $day <= $daysInMonth; $day++) {
             $date = new \DateTime("{$year}-{$month}-{$day}", $tz);
-            $slots = $this->getAvailableSlots(clone $date);
             $dateStr = $date->format('Y-m-d');
+
+            // Arbeitszeiten für diesen Wochentag
+            $dayName = strtolower($date->format('l'));
+            $workingHours = $this->config['working_hours'][$dayName] ?? null;
+
+            if (!$workingHours) {
+                continue; // Kein Arbeitstag
+            }
+
+            $dayStart = clone $date;
+            $dayStart->setTime(
+                (int)substr($workingHours['start'], 0, 2),
+                (int)substr($workingHours['start'], 3, 2),
+                0
+            );
+
+            $dayEnd = clone $date;
+            $dayEnd->setTime(
+                (int)substr($workingHours['end'], 0, 2),
+                (int)substr($workingHours['end'], 3, 2),
+                0
+            );
+
+            // Nur Busy-Slots dieses Tages filtern
+            $dayBusy = array_filter($allBusySlots, function ($busy) use ($dayStart, $dayEnd) {
+                return $busy['start'] < $dayEnd && $busy['end'] > $dayStart;
+            });
+
+            // Pausenzeit als Busy-Slot hinzufügen
+            if ($breakEnabled) {
+                $breakStart = clone $date;
+                $breakStart->setTime(
+                    (int)substr($breakTime['start'], 0, 2),
+                    (int)substr($breakTime['start'], 3, 2),
+                    0
+                );
+                $breakEnd = clone $date;
+                $breakEnd->setTime(
+                    (int)substr($breakTime['end'], 0, 2),
+                    (int)substr($breakTime['end'], 3, 2),
+                    0
+                );
+                $dayBusy[] = ['start' => $breakStart, 'end' => $breakEnd];
+            }
+
+            $mergedBusy = $this->mergeBusySlots(array_values($dayBusy));
+            $slots = $this->calculateFreeSlots($dayStart, $dayEnd, $mergedBusy);
+
+            // Mindestvorlaufzeit prüfen
+            $slots = array_filter($slots, function ($slot) use ($minNotice) {
+                return $slot['datetime_start'] >= $minNotice;
+            });
+
             if (!empty($slots)) {
                 $available[$dateStr] = count($slots);
             }

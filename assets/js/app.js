@@ -23,6 +23,9 @@
         currentStep: 1,
     };
 
+    // Cache für bereits geladene Monate (key: "YYYY-MM")
+    const daysCache = {};
+
     // DOM Elemente
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
@@ -111,26 +114,62 @@
     }
 
     function loadAvailableDays(year, month) {
+        const cacheKey = `${year}-${String(month).padStart(2, '0')}`;
+
+        // Aus Cache laden falls vorhanden
+        if (daysCache[cacheKey]) {
+            state.availableDays = daysCache[cacheKey];
+            state.loading = false;
+            renderCalendar();
+            updatePrevButton(year, month);
+            prefetchNextMonth(year, month);
+            return;
+        }
+
         state.loading = true;
         renderCalendar();
 
         fetch(`api/slots.php?action=days&year=${year}&month=${month}`)
             .then(r => r.json())
             .then(data => {
-                state.availableDays = data.days || {};
+                const days = data.days || {};
+                daysCache[cacheKey] = days;
+                state.availableDays = days;
                 state.loading = false;
                 renderCalendar();
-
-                // Prev-Button deaktivieren wenn aktueller Monat
-                const now = new Date();
-                $('#btn-prev-month').disabled =
-                    (year === now.getFullYear() && month <= now.getMonth() + 1);
+                updatePrevButton(year, month);
+                prefetchNextMonth(year, month);
             })
             .catch(() => {
                 state.loading = false;
                 state.availableDays = {};
                 renderCalendar();
             });
+    }
+
+    function updatePrevButton(year, month) {
+        const now = new Date();
+        $('#btn-prev-month').disabled =
+            (year === now.getFullYear() && month <= now.getMonth() + 1);
+    }
+
+    function prefetchNextMonth(year, month) {
+        let nextMonth = month + 1;
+        let nextYear = year;
+        if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear++;
+        }
+
+        const nextKey = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+        if (daysCache[nextKey]) return;
+
+        fetch(`api/slots.php?action=days&year=${nextYear}&month=${nextMonth}`)
+            .then(r => r.json())
+            .then(data => {
+                daysCache[nextKey] = data.days || {};
+            })
+            .catch(() => {}); // Stilles Fehlschlagen beim Prefetch
     }
 
     function renderCalendar() {
