@@ -71,12 +71,29 @@ class GoogleCalendarService
      */
     public function getFreeBusy(\DateTimeInterface $start, \DateTimeInterface $end): array
     {
+        $handles = $this->prepareFreeBusyCurl($start, $end);
+        if (empty($handles)) {
+            return [];
+        }
+
+        $entry = $handles[0];
+        $response = curl_exec($entry['handle']);
+        curl_close($entry['handle']);
+
+        return $this->parseFreeBusyResponse($response);
+    }
+
+    /**
+     * Bereitet curl-Handle für Free/Busy-Abfrage vor (für parallele Ausführung).
+     * @return array [['handle' => resource], ...]
+     */
+    public function prepareFreeBusyCurl(\DateTimeInterface $start, \DateTimeInterface $end): array
+    {
         $accessToken = $this->getValidAccessToken();
         if (!$accessToken) {
             return [];
         }
 
-        // Google FreeBusy API nutzen
         $calendarIds = [];
         foreach ($this->sourceConfig['calendars'] as $calId) {
             $calendarIds[] = ['id' => $calId];
@@ -89,12 +106,31 @@ class GoogleCalendarService
             'items' => $calendarIds,
         ];
 
-        $url = self::CALENDAR_API . '/freeBusy';
-        $response = $this->apiPost($url, $body, $accessToken);
+        $ch = curl_init(self::CALENDAR_API . '/freeBusy');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($body),
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
 
+        return [['handle' => $ch]];
+    }
+
+    /**
+     * Parsed eine Free/Busy-Response zu Busy-Slots.
+     */
+    public function parseFreeBusyResponse(string $response): array
+    {
+        $data = json_decode($response, true) ?: [];
         $busySlots = [];
-        if (isset($response['calendars'])) {
-            foreach ($response['calendars'] as $calData) {
+
+        if (isset($data['calendars'])) {
+            foreach ($data['calendars'] as $calData) {
                 if (isset($calData['busy'])) {
                     foreach ($calData['busy'] as $busy) {
                         $busySlots[] = [

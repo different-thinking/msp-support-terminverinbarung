@@ -178,14 +178,61 @@ class AvailabilityEngine
         return $available;
     }
 
+    /**
+     * Sammelt Busy-Slots aus allen Kalender-Quellen parallel via curl_multi.
+     */
     private function collectBusySlots(\DateTime $start, \DateTime $end): array
     {
-        $allBusy = [];
-
+        // Alle curl-Handles + zugehörige Services sammeln
+        $requests = [];
         foreach ($this->calendarServices as $service) {
-            $busy = $service->getFreeBusy($start, $end);
-            $allBusy = array_merge($allBusy, $busy);
+            $handles = $service->prepareFreeBusyCurl($start, $end);
+            foreach ($handles as $entry) {
+                $requests[] = [
+                    'handle' => $entry['handle'],
+                    'service' => $service,
+                ];
+            }
         }
+
+        if (empty($requests)) {
+            return [];
+        }
+
+        // Bei nur einem Request kein curl_multi nötig
+        if (count($requests) === 1) {
+            $req = $requests[0];
+            $response = curl_exec($req['handle']);
+            curl_close($req['handle']);
+            return $req['service']->parseFreeBusyResponse($response ?: '');
+        }
+
+        // Parallel ausführen
+        $mh = curl_multi_init();
+        foreach ($requests as $req) {
+            curl_multi_add_handle($mh, $req['handle']);
+        }
+
+        do {
+            $status = curl_multi_exec($mh, $active);
+            if ($active) {
+                curl_multi_select($mh);
+            }
+        } while ($active && $status === CURLM_OK);
+
+        // Ergebnisse sammeln und parsen
+        $allBusy = [];
+        foreach ($requests as $req) {
+            $response = curl_multi_getcontent($req['handle']);
+            $allBusy = array_merge(
+                $allBusy,
+                $req['service']->parseFreeBusyResponse($response ?: '')
+            );
+            curl_multi_remove_handle($mh, $req['handle']);
+            curl_close($req['handle']);
+        }
+
+        curl_multi_close($mh);
 
         return $allBusy;
     }

@@ -77,13 +77,33 @@ class MicrosoftCalendarService
      */
     public function getFreeBusy(\DateTimeInterface $start, \DateTimeInterface $end): array
     {
+        $handles = $this->prepareFreeBusyCurl($start, $end);
+        if (empty($handles)) {
+            return [];
+        }
+
+        $busySlots = [];
+        foreach ($handles as $entry) {
+            $response = curl_exec($entry['handle']);
+            curl_close($entry['handle']);
+            $busySlots = array_merge($busySlots, $this->parseFreeBusyResponse($response));
+        }
+
+        return $busySlots;
+    }
+
+    /**
+     * Bereitet curl-Handles für Free/Busy-Abfragen vor (für parallele Ausführung).
+     * @return array [['handle' => resource], ...]
+     */
+    public function prepareFreeBusyCurl(\DateTimeInterface $start, \DateTimeInterface $end): array
+    {
         $accessToken = $this->getValidAccessToken();
         if (!$accessToken) {
             return [];
         }
 
-        $busySlots = [];
-
+        $handles = [];
         foreach ($this->sourceConfig['calendars'] as $calendarId) {
             $calPath = ($calendarId === 'primary') ? '' : "/calendars/{$calendarId}";
             $url = self::GRAPH_URL . "/me{$calPath}/calendarView?"
@@ -94,18 +114,39 @@ class MicrosoftCalendarService
                     '$top' => 500,
                 ]);
 
-            $response = $this->graphGet($url, $accessToken);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'Authorization: Bearer ' . $accessToken,
+                    'Content-Type: application/json',
+                    'Prefer: outlook.timezone="Europe/Berlin"',
+                ],
+                CURLOPT_TIMEOUT => 30,
+            ]);
 
-            if (isset($response['value'])) {
-                foreach ($response['value'] as $event) {
-                    // Nur als "belegt" markierte Termine blockieren
-                    $showAs = $event['showAs'] ?? 'busy';
-                    if (in_array($showAs, ['busy', 'oof', 'tentative'])) {
-                        $busySlots[] = [
-                            'start' => new \DateTime($event['start']['dateTime'], new \DateTimeZone($event['start']['timeZone'] ?? 'UTC')),
-                            'end' => new \DateTime($event['end']['dateTime'], new \DateTimeZone($event['end']['timeZone'] ?? 'UTC')),
-                        ];
-                    }
+            $handles[] = ['handle' => $ch];
+        }
+
+        return $handles;
+    }
+
+    /**
+     * Parsed eine Free/Busy-Response zu Busy-Slots.
+     */
+    public function parseFreeBusyResponse(string $response): array
+    {
+        $data = json_decode($response, true) ?: [];
+        $busySlots = [];
+
+        if (isset($data['value'])) {
+            foreach ($data['value'] as $event) {
+                $showAs = $event['showAs'] ?? 'busy';
+                if (in_array($showAs, ['busy', 'oof', 'tentative'])) {
+                    $busySlots[] = [
+                        'start' => new \DateTime($event['start']['dateTime'], new \DateTimeZone($event['start']['timeZone'] ?? 'UTC')),
+                        'end' => new \DateTime($event['end']['dateTime'], new \DateTimeZone($event['end']['timeZone'] ?? 'UTC')),
+                    ];
                 }
             }
         }
