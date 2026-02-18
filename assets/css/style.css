@@ -325,7 +325,7 @@ body {
     width: 200px;
     text-align: left;
     vertical-align: top;
-    margin-right: 24px;
+    margin-left: 24px;
 }
 
 .time-slots-container.hidden {
@@ -722,11 +722,6 @@ body {
         display: none;
     }
 
-    .calendar-time-wrapper {
-        display: flex;
-        flex-direction: column-reverse;
-    }
-
     .calendar-container {
         display: block;
         width: 100%;
@@ -735,8 +730,8 @@ body {
     .time-slots-container {
         display: block;
         width: 100%;
-        margin-right: 0;
-        margin-bottom: 24px;
+        margin-left: 0;
+        margin-top: 24px;
     }
 
     .time-slots-grid {
