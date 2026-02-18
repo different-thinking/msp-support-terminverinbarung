@@ -207,15 +207,13 @@ body {
 /* Calendar & Time Layout */
 .calendar-time-wrapper {
     display: flex;
-    flex-direction: row-reverse;
     gap: 24px;
     align-items: flex-start;
     justify-content: center;
 }
 
 .calendar-container {
-    flex: 0 0 420px;
-    max-width: 420px;
+    width: 420px;
 }
 
 .calendar-nav {
@@ -323,8 +321,7 @@ body {
 
 /* Time Slots */
 .time-slots-container {
-    flex: 0 0 200px;
-    margin-top: 0;
+    width: 200px;
 }
 
 .time-slots-container.hidden {
@@ -722,17 +719,16 @@ body {
     }
 
     .calendar-time-wrapper {
-        flex-direction: column;
+        flex-direction: column-reverse;
     }
 
     .calendar-container {
-        max-width: 100%;
-        flex: auto;
+        width: 100%;
     }
 
     .time-slots-container {
-        flex: auto;
-        margin-top: 24px;
+        width: 100%;
+        margin-bottom: 24px;
     }
 
     .time-slots-grid {
