@@ -23,6 +23,18 @@
         });
     });
 
+    // Inline nav links (inside content, e.g. guide pages)
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('.nav-link-inline[data-tab]');
+        if (link) {
+            e.preventDefault();
+            const tab = link.dataset.tab;
+            const navItem = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+            if (navItem) navItem.click();
+            window.scrollTo(0, 0);
+        }
+    });
+
     // Tab aus URL-Hash laden
     const hash = location.hash.slice(1);
     if (hash) {

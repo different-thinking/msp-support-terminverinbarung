@@ -114,6 +114,13 @@ foreach ($config['calendar_sources'] as $src) {
             <a href="#" class="nav-item" data-tab="access">
                 <span class="nav-icon">&#128274;</span> Zugang
             </a>
+            <hr style="border:none;border-top:1px solid var(--gray-100);margin:8px 12px;">
+            <a href="#" class="nav-item" data-tab="setup-m365">
+                <span class="nav-icon">&#128214;</span> M365-Anleitung
+            </a>
+            <a href="#" class="nav-item" data-tab="setup-google">
+                <span class="nav-icon">&#128214;</span> Google-Anleitung
+            </a>
         </nav>
         <div class="sidebar-footer">
             <a href="../" class="nav-item" target="_blank">
@@ -286,6 +293,10 @@ foreach ($config['calendar_sources'] as $src) {
                 Die App prüft die Verfügbarkeit über alle verbundenen Kalender hinweg.
                 Der als <strong>Buchungsziel</strong> markierte M365-Kalender wird zum Erstellen
                 neuer Termine und Versenden der Einladungen verwendet.
+                <br><br>
+                <strong>Ersteinrichtung?</strong>
+                <a href="#" class="nav-link-inline" data-tab="setup-m365">M365-Anleitung</a> |
+                <a href="#" class="nav-link-inline" data-tab="setup-google">Google-Anleitung</a>
             </div>
 
             <div id="calendar-sources-list">
@@ -579,9 +590,399 @@ foreach ($config['calendar_sources'] as $src) {
             </form>
         </section>
 
+        <!-- ==================== Anleitung: M365 ==================== -->
+        <section id="tab-setup-m365" class="tab-content">
+            <div class="tab-header">
+                <h1>Microsoft 365 einrichten</h1>
+                <p>Schritt-für-Schritt-Anleitung zur Konfiguration der Azure App-Registrierung</p>
+            </div>
+
+            <?php
+            $appUrl = $config['app']['url'] ?: 'https://ihre-domain.de';
+            $redirectMs = rtrim($appUrl, '/') . '/admin/auth-microsoft.php';
+            ?>
+
+            <!-- Schritt 1 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">1</span>
+                    <h3>Azure Portal öffnen</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Öffnen Sie das Azure Portal und navigieren Sie zu <strong>App-Registrierungen</strong>:</p>
+                    <div class="guide-url-box">
+                        <code>https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade</code>
+                    </div>
+                    <p>Melden Sie sich mit Ihrem Microsoft 365 Administrator-Konto an.</p>
+                </div>
+            </div>
+
+            <!-- Schritt 2 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">2</span>
+                    <h3>Neue Registrierung erstellen</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Klicken Sie auf <strong>"+ Neue Registrierung"</strong> und füllen Sie aus:</p>
+                    <table class="guide-table">
+                        <tr>
+                            <td class="guide-label">Name</td>
+                            <td><code>Terminbuchung</code> <span class="text-muted">(frei wählbar)</span></td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Unterstützte Kontotypen</td>
+                            <td>
+                                <strong>"Nur Konten in diesem Organisationsverzeichnis"</strong><br>
+                                <span class="text-muted">(Single Tenant – empfohlen für ein Unternehmen)</span><br>
+                                <span class="text-muted">Oder "Konten in einem beliebigen Organisationsverzeichnis" für Multi-Tenant</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Umleitungs-URI</td>
+                            <td>
+                                Plattform: <strong>Web</strong><br>
+                                URI: <code id="redirect-uri-ms"><?= htmlspecialchars($redirectMs) ?></code>
+                                <button type="button" class="btn-copy" onclick="copyText('redirect-uri-ms')" title="Kopieren">&#128203;</button>
+                            </td>
+                        </tr>
+                    </table>
+                    <p>Klicken Sie auf <strong>"Registrieren"</strong>.</p>
+                    <div class="guide-info">
+                        <?php if (empty($config['app']['url'])): ?>
+                        <strong>Hinweis:</strong> Sie haben noch keine App-URL konfiguriert.
+                        Bitte tragen Sie diese zuerst unter <a href="#" class="nav-link-inline" data-tab="general">Allgemein</a> ein,
+                        damit die Redirect-URI korrekt ist.
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schritt 3 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">3</span>
+                    <h3>Client-ID kopieren</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Nach der Registrierung werden Sie zur Übersicht weitergeleitet. Kopieren Sie:</p>
+                    <table class="guide-table">
+                        <tr>
+                            <td class="guide-label">Anwendungs-ID (Client)</td>
+                            <td>
+                                Die <strong>Application (client) ID</strong> – eine UUID wie<br>
+                                <code>12345678-abcd-efgh-ijkl-123456789012</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Verzeichnis-ID (Tenant)</td>
+                            <td>
+                                Die <strong>Directory (tenant) ID</strong> – benötigen Sie gleich<br>
+                                <span class="text-muted">Bei Multi-Tenant stattdessen <code>common</code> verwenden</span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Schritt 4 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">4</span>
+                    <h3>Client Secret erstellen</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Navigieren Sie in der linken Sidebar zu <strong>"Zertifikate & Geheimnisse"</strong>:</p>
+                    <ol class="guide-ol">
+                        <li>Klicken Sie auf <strong>"+ Neuer geheimer Clientschlüssel"</strong></li>
+                        <li>Beschreibung: <code>Terminbuchung</code></li>
+                        <li>Ablauf: <strong>24 Monate</strong> (oder nach Bedarf)</li>
+                        <li>Klicken Sie <strong>"Hinzufügen"</strong></li>
+                        <li>
+                            <strong class="guide-important">Sofort den "Wert" kopieren!</strong><br>
+                            <span class="text-muted">Der Wert wird nur einmal angezeigt. Nach dem Verlassen der Seite ist er nicht mehr sichtbar.</span>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Schritt 5 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">5</span>
+                    <h3>API-Berechtigungen konfigurieren</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Navigieren Sie zu <strong>"API-Berechtigungen"</strong> in der linken Sidebar:</p>
+                    <ol class="guide-ol">
+                        <li>Klicken Sie auf <strong>"+ Berechtigung hinzufügen"</strong></li>
+                        <li>Wählen Sie <strong>"Microsoft Graph"</strong></li>
+                        <li>Wählen Sie <strong>"Delegierte Berechtigungen"</strong></li>
+                        <li>Suchen und aktivieren Sie folgende Berechtigungen:</li>
+                    </ol>
+                    <div class="guide-permissions">
+                        <div class="guide-perm">
+                            <code>Calendars.ReadWrite</code>
+                            <span>Kalender lesen und Termine erstellen</span>
+                        </div>
+                        <div class="guide-perm">
+                            <code>OnlineMeetings.ReadWrite</code>
+                            <span>Teams-Meetings erstellen</span>
+                        </div>
+                        <div class="guide-perm">
+                            <code>Mail.Send</code>
+                            <span>E-Mails senden (für Einladungen)</span>
+                        </div>
+                        <div class="guide-perm">
+                            <code>offline_access</code>
+                            <span>Token automatisch erneuern</span>
+                        </div>
+                    </div>
+                    <ol class="guide-ol" start="5">
+                        <li>Klicken Sie <strong>"Berechtigungen hinzufügen"</strong></li>
+                        <li>Klicken Sie dann auf <strong>"Administratorzustimmung für [Ihr Verzeichnis] erteilen"</strong></li>
+                        <li>Bestätigen Sie mit <strong>"Ja"</strong></li>
+                    </ol>
+                    <div class="guide-info">
+                        <strong>Wichtig:</strong> Die Admin-Zustimmung ist erforderlich, damit die App im Namen
+                        des angemeldeten Benutzers Kalender und Teams-Meetings verwalten darf.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schritt 6 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">6</span>
+                    <h3>In der App konfigurieren</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Jetzt haben Sie alle benötigten Daten. Gehen Sie zu
+                        <a href="#" class="nav-link-inline" data-tab="calendars"><strong>Kalender</strong></a>
+                        und klicken Sie <strong>"+ Kalender-Quelle hinzufügen"</strong>:
+                    </p>
+                    <table class="guide-table">
+                        <tr>
+                            <td class="guide-label">Typ</td>
+                            <td><strong>Microsoft 365</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Bezeichnung</td>
+                            <td>z.B. <code>Mein M365 Konto</code></td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Client-ID</td>
+                            <td>Die Application (client) ID aus Schritt 3</td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Client Secret</td>
+                            <td>Der Geheimniswert aus Schritt 4</td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Tenant-ID</td>
+                            <td>Die Directory (tenant) ID aus Schritt 3<br>
+                                <span class="text-muted">Oder <code>common</code> bei Multi-Tenant</span></td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Kalender-IDs</td>
+                            <td><code>primary</code> <span class="text-muted">(für den Hauptkalender)</span></td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Buchungsziel</td>
+                            <td><strong>Aktivieren</strong> – Termine werden in diesen Kalender eingetragen</td>
+                        </tr>
+                    </table>
+                    <p>Klicken Sie <strong>"Speichern"</strong>.</p>
+                </div>
+            </div>
+
+            <!-- Schritt 7 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">7</span>
+                    <h3>Kalender verbinden (OAuth)</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Nach dem Speichern erscheint bei der Kalender-Quelle ein <strong>"Verbinden"</strong>-Button:</p>
+                    <ol class="guide-ol">
+                        <li>Klicken Sie <strong>"Verbinden"</strong></li>
+                        <li>Sie werden zum Microsoft-Login weitergeleitet</li>
+                        <li>Melden Sie sich mit dem M365-Konto an, dessen Kalender verwendet werden soll</li>
+                        <li>Bestätigen Sie die angeforderten Berechtigungen</li>
+                        <li>Sie werden zurück zur Admin-Seite geleitet</li>
+                        <li>Der Status wechselt auf <span class="status connected" style="display:inline-flex;"><span class="status-dot"></span> Verbunden</span></li>
+                    </ol>
+                    <div class="guide-info">
+                        <strong>Fertig!</strong> Die App kann jetzt den Kalender lesen, Termine erstellen,
+                        Teams-Meetings anlegen und Einladungen direkt aus dem M365-Konto versenden.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schritt 8 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">8</span>
+                    <h3>Teams-Meeting aktivieren</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Abschließend unter <a href="#" class="nav-link-inline" data-tab="teams"><strong>Teams-Meeting</strong></a>:</p>
+                    <ol class="guide-ol">
+                        <li>Haken bei <strong>"Teams-Meeting automatisch erstellen"</strong> setzen</li>
+                        <li>Den soeben eingerichteten M365-Account als <strong>Teams-Account</strong> auswählen</li>
+                        <li><strong>"Speichern"</strong> klicken</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="guide-done-box">
+                <strong>Geschafft!</strong> Ihre Terminbuchung ist jetzt vollständig mit Microsoft 365 verbunden.
+                <br>Buchende erhalten eine echte Outlook-Einladung mit Teams-Link direkt aus Ihrem M365-Postfach.
+                <br><br>
+                <a href="#" class="btn btn-primary nav-link-inline" data-tab="calendars">Jetzt Kalender konfigurieren</a>
+            </div>
+        </section>
+
+        <!-- ==================== Anleitung: Google ==================== -->
+        <section id="tab-setup-google" class="tab-content">
+            <div class="tab-header">
+                <h1>Google Kalender einrichten</h1>
+                <p>Schritt-für-Schritt-Anleitung zur Konfiguration der Google Cloud Console</p>
+            </div>
+
+            <?php
+            $redirectGoogle = rtrim($appUrl, '/') . '/admin/auth-google.php';
+            ?>
+
+            <!-- Schritt 1 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">1</span>
+                    <h3>Google Cloud Console öffnen</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Öffnen Sie die Google Cloud Console:</p>
+                    <div class="guide-url-box">
+                        <code>https://console.cloud.google.com/apis/credentials</code>
+                    </div>
+                    <p>Erstellen Sie bei Bedarf ein neues Projekt oder wählen Sie ein bestehendes.</p>
+                </div>
+            </div>
+
+            <!-- Schritt 2 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">2</span>
+                    <h3>Google Calendar API aktivieren</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Navigieren Sie zu <strong>"APIs und Dienste" &rarr; "Bibliothek"</strong>:</p>
+                    <ol class="guide-ol">
+                        <li>Suchen Sie nach <strong>"Google Calendar API"</strong></li>
+                        <li>Klicken Sie darauf und dann <strong>"Aktivieren"</strong></li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Schritt 3 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">3</span>
+                    <h3>OAuth-Zustimmungsbildschirm einrichten</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Unter <strong>"APIs und Dienste" &rarr; "OAuth-Zustimmungsbildschirm"</strong>:</p>
+                    <ol class="guide-ol">
+                        <li>Typ: <strong>"Extern"</strong> (oder "Intern" bei Google Workspace)</li>
+                        <li>App-Name: <code>Terminbuchung</code></li>
+                        <li>Support-E-Mail: Ihre E-Mail-Adresse</li>
+                        <li>Scopes hinzufügen: <code>Google Calendar API - .../auth/calendar.readonly</code></li>
+                        <li>Test-User hinzufügen: Ihre Google-E-Mail</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Schritt 4 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">4</span>
+                    <h3>OAuth-Client-ID erstellen</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Unter <strong>"APIs und Dienste" &rarr; "Anmeldedaten"</strong>:</p>
+                    <ol class="guide-ol">
+                        <li>Klicken Sie <strong>"+ Anmeldedaten erstellen" &rarr; "OAuth-Client-ID"</strong></li>
+                        <li>Anwendungstyp: <strong>Webanwendung</strong></li>
+                        <li>Name: <code>Terminbuchung</code></li>
+                        <li>Autorisierte Weiterleitungs-URIs hinzufügen:</li>
+                    </ol>
+                    <div class="guide-url-box">
+                        <code id="redirect-uri-google"><?= htmlspecialchars($redirectGoogle) ?></code>
+                        <button type="button" class="btn-copy" onclick="copyText('redirect-uri-google')" title="Kopieren">&#128203;</button>
+                    </div>
+                    <ol class="guide-ol" start="5">
+                        <li>Klicken Sie <strong>"Erstellen"</strong></li>
+                        <li>Kopieren Sie <strong>Client-ID</strong> und <strong>Client Secret</strong></li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Schritt 5 -->
+            <div class="admin-card guide-step">
+                <div class="guide-step-header">
+                    <span class="guide-step-number">5</span>
+                    <h3>In der App konfigurieren</h3>
+                </div>
+                <div class="guide-step-body">
+                    <p>Unter <a href="#" class="nav-link-inline" data-tab="calendars"><strong>Kalender</strong></a>
+                        &rarr; <strong>"+ Kalender-Quelle hinzufügen"</strong>:</p>
+                    <table class="guide-table">
+                        <tr>
+                            <td class="guide-label">Typ</td>
+                            <td><strong>Google</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Client-ID</td>
+                            <td>Die Client-ID aus Schritt 4</td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Client Secret</td>
+                            <td>Das Client Secret aus Schritt 4</td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Kalender-IDs</td>
+                            <td><code>primary</code> oder spezifische Kalender-IDs</td>
+                        </tr>
+                        <tr>
+                            <td class="guide-label">Buchungsziel</td>
+                            <td><strong>Nicht aktivieren</strong> – Google dient nur zur Verfügbarkeitsprüfung</td>
+                        </tr>
+                    </table>
+                    <p>Speichern und dann <strong>"Verbinden"</strong> klicken.</p>
+                </div>
+            </div>
+
+            <div class="guide-done-box">
+                <strong>Hinweis:</strong> Google-Kalender werden nur zur Verfügbarkeitsprüfung verwendet.
+                Termine und Einladungen werden über den M365-Account erstellt und versendet.
+                <br><br>
+                <a href="#" class="btn btn-primary nav-link-inline" data-tab="calendars">Jetzt Kalender konfigurieren</a>
+            </div>
+        </section>
+
     </main>
 </div>
 
+<script>
+function copyText(id) {
+    const el = document.getElementById(id);
+    navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+        const btn = el.nextElementSibling;
+        btn.textContent = '\u2713';
+        setTimeout(() => { btn.textContent = '\uD83D\uDCCB'; }, 1500);
+    });
+}
+</script>
 <script src="../assets/js/admin.js"></script>
 <?php endif; ?>
 </body>
