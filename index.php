@@ -30,7 +30,7 @@ $bookingInfo = $design['booking_info'] ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($appName) ?> – <?= htmlspecialchars($organizerName) ?></title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?= time() ?>">
 </head>
 <body data-duration="<?= $duration ?>">
 
@@ -208,6 +208,6 @@ $bookingInfo = $design['booking_info'] ?? '';
     </div>
 </div>
 
-<script src="assets/js/app.js"></script>
+<script src="assets/js/app.js?v=<?= time() ?>"></script>
 </body>
 </html>
