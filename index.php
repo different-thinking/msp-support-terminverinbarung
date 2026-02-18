@@ -81,17 +81,19 @@ $bookingInfo = $design['booking_info'] ?? '';
         <p class="booking-info-text"><?= formatText($bookingInfo) ?></p>
         <?php endif; ?>
 
-        <div class="calendar-container">
-            <div class="calendar-nav">
-                <button id="btn-prev-month" type="button" disabled>&larr;</button>
-                <span id="calendar-month-year" class="calendar-month-year"></span>
-                <button id="btn-next-month" type="button">&rarr;</button>
+        <div class="calendar-time-wrapper">
+            <div class="calendar-container">
+                <div class="calendar-nav">
+                    <button id="btn-prev-month" type="button" disabled>&larr;</button>
+                    <span id="calendar-month-year" class="calendar-month-year"></span>
+                    <button id="btn-next-month" type="button">&rarr;</button>
+                </div>
+
+                <div id="calendar-grid" class="calendar-grid"></div>
             </div>
 
-            <div id="calendar-grid" class="calendar-grid"></div>
+            <div id="time-slots-container" class="time-slots-container" style="display: none;"></div>
         </div>
-
-        <div id="time-slots-container" class="time-slots-container" style="display: none;"></div>
 
         <div class="btn-group">
             <span></span>

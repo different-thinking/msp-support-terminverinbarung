@@ -204,10 +204,16 @@ body {
     color: var(--gray-800);
 }
 
-/* Calendar */
+/* Calendar & Time Layout */
+.calendar-time-wrapper {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
 .calendar-container {
+    flex: 1;
     max-width: 420px;
-    margin: 0 auto;
 }
 
 .calendar-nav {
@@ -315,7 +321,9 @@ body {
 
 /* Time Slots */
 .time-slots-container {
-    margin-top: 24px;
+    flex: 0 0 200px;
+    margin-top: 0;
+    order: -1;
 }
 
 .time-slots-date {
@@ -327,7 +335,7 @@ body {
 
 .time-slots-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: 1fr;
     gap: 8px;
 }
 
@@ -706,6 +714,20 @@ body {
 
     .step-connector {
         display: none;
+    }
+
+    .calendar-time-wrapper {
+        flex-direction: column;
+    }
+
+    .calendar-container {
+        max-width: 100%;
+    }
+
+    .time-slots-container {
+        flex: auto;
+        order: 0;
+        margin-top: 24px;
     }
 
     .time-slots-grid {
