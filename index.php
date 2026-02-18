@@ -3,6 +3,14 @@
  * Terminbuchung – Hauptseite
  */
 $config = require __DIR__ . '/config.php';
+
+/** Wandelt **text** in <strong>text</strong> um (nach htmlspecialchars). */
+function formatText(string $text): string {
+    $safe = htmlspecialchars($text);
+    $safe = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $safe);
+    return nl2br($safe);
+}
+
 $appName = $config['app']['name'];
 $duration = $config['app']['appointment_duration_minutes'];
 $additionalFields = $config['booking_form']['additional_fields'];
@@ -42,7 +50,7 @@ $bookingInfo = $design['booking_info'] ?? '';
         <h1><?= htmlspecialchars($welcomeTitle ?: $appName) ?></h1>
         <p class="organizer-name"><?= htmlspecialchars($organizerName) ?></p>
         <?php if ($welcomeText): ?>
-        <p class="welcome-text"><?= nl2br(htmlspecialchars($welcomeText)) ?></p>
+        <p class="welcome-text"><?= formatText($welcomeText) ?></p>
         <?php else: ?>
         <p class="welcome-text">Buchen Sie einen <?= $duration ?>-Minuten-Termin</p>
         <?php endif; ?>
@@ -70,7 +78,7 @@ $bookingInfo = $design['booking_info'] ?? '';
     <div id="panel-calendar" class="booking-panel active">
         <h2 class="panel-title">Wählen Sie Datum und Uhrzeit</h2>
         <?php if ($bookingInfo): ?>
-        <p class="booking-info-text"><?= nl2br(htmlspecialchars($bookingInfo)) ?></p>
+        <p class="booking-info-text"><?= formatText($bookingInfo) ?></p>
         <?php endif; ?>
 
         <div class="calendar-container">
