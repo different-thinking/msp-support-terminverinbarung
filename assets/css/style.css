@@ -324,7 +324,6 @@ body {
 .time-slots-container {
     flex: 0 0 200px;
     margin-top: 0;
-    order: -1;
 }
 
 .time-slots-date {
@@ -725,9 +724,12 @@ body {
         max-width: 100%;
     }
 
+    .calendar-container {
+        order: -1;
+    }
+
     .time-slots-container {
         flex: auto;
-        order: 0;
         margin-top: 24px;
     }
 
