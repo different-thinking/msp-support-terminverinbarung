@@ -82,7 +82,7 @@ $bookingInfo = $design['booking_info'] ?? '';
         <?php endif; ?>
 
         <div class="calendar-time-wrapper">
-            <div id="time-slots-container" class="time-slots-container" style="display: none;"></div>
+            <div id="time-slots-container" class="time-slots-container hidden"></div>
 
             <div class="calendar-container">
                 <div class="calendar-nav">

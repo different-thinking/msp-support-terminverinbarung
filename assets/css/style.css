@@ -326,6 +326,10 @@ body {
     margin-top: 0;
 }
 
+.time-slots-container.hidden {
+    display: none;
+}
+
 .time-slots-date {
     font-size: 16px;
     font-weight: 600;

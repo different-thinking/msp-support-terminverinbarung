@@ -207,7 +207,7 @@
 
     function loadTimeSlots(date) {
         const container = $('#time-slots-container');
-        container.style.display = 'block';
+        container.classList.remove('hidden');
         container.innerHTML = '<div class="calendar-loading"><div class="spinner spinner-dark"></div></div>';
 
         fetch(`api/slots.php?action=slots&date=${date}`)
