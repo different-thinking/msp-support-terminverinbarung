@@ -206,14 +206,14 @@ body {
 
 /* Calendar & Time Layout */
 .calendar-time-wrapper {
-    display: flex;
-    gap: 24px;
-    align-items: flex-start;
-    justify-content: center;
+    text-align: center;
 }
 
 .calendar-container {
+    display: inline-block;
     width: 420px;
+    text-align: left;
+    vertical-align: top;
 }
 
 .calendar-nav {
@@ -321,11 +321,15 @@ body {
 
 /* Time Slots */
 .time-slots-container {
+    display: inline-block;
     width: 200px;
+    text-align: left;
+    vertical-align: top;
+    margin-right: 24px;
 }
 
 .time-slots-container.hidden {
-    display: none;
+    display: none !important;
 }
 
 .time-slots-date {
@@ -719,15 +723,19 @@ body {
     }
 
     .calendar-time-wrapper {
+        display: flex;
         flex-direction: column-reverse;
     }
 
     .calendar-container {
+        display: block;
         width: 100%;
     }
 
     .time-slots-container {
+        display: block;
         width: 100%;
+        margin-right: 0;
         margin-bottom: 24px;
     }
 
