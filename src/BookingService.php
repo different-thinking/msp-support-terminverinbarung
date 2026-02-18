@@ -157,6 +157,9 @@ class BookingService
             $teamsLink = $event['onlineMeeting']['joinUrl'];
         }
 
+        // Informationsmail an Kalenderinhaber senden
+        $this->sendOwnerNotification($bookingTarget, $bookingData, $start, $end, $teamsLink);
+
         return [
             'success' => true,
             'message' => 'Termin erfolgreich gebucht! Sie erhalten eine Einladung per E-Mail von ' . $this->config['organizer']['name'] . '.',
@@ -269,6 +272,106 @@ class BookingService
         }
 
         return ['valid' => true, 'error' => ''];
+    }
+
+    /**
+     * Sendet eine Informationsmail an den Kalenderinhaber über die neue Buchung.
+     */
+    private function sendOwnerNotification(
+        MicrosoftCalendarService $service,
+        array $bookingData,
+        \DateTime $start,
+        \DateTime $end,
+        string $teamsLink
+    ): void {
+        $organizerEmail = $this->config['organizer']['email'] ?? '';
+        if (empty($organizerEmail)) {
+            return;
+        }
+
+        $subject = sprintf(
+            'Neue Buchung: %s %s am %s um %s',
+            $bookingData['firstname'],
+            $bookingData['lastname'],
+            $start->format('d.m.Y'),
+            $start->format('H:i')
+        );
+
+        $bodyHtml = $this->buildOwnerMailHtml($bookingData, $start, $end, $teamsLink);
+
+        try {
+            $service->sendMail([
+                'to' => [
+                    [
+                        'email' => $organizerEmail,
+                        'name' => $this->config['organizer']['name'] ?? '',
+                    ],
+                ],
+                'subject' => $subject,
+                'body_html' => $bodyHtml,
+            ]);
+        } catch (\Exception $e) {
+            // Mail-Fehler nicht an den Buchenden weitergeben,
+            // der Termin wurde bereits erfolgreich erstellt
+            error_log('Owner notification mail failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Baut den HTML-Body für die Benachrichtigungsmail an den Kalenderinhaber.
+     */
+    private function buildOwnerMailHtml(
+        array $data,
+        \DateTime $start,
+        \DateTime $end,
+        string $teamsLink
+    ): string {
+        $html = '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px">';
+        $html .= '<h2 style="color:#1a73e8">Neue Terminbuchung</h2>';
+        $html .= '<table style="border-collapse:collapse;width:100%">';
+
+        $rows = [
+            'Datum' => $start->format('d.m.Y'),
+            'Uhrzeit' => $start->format('H:i') . ' – ' . $end->format('H:i'),
+            'Vorname' => htmlspecialchars($data['firstname']),
+            'Nachname' => htmlspecialchars($data['lastname']),
+            'E-Mail' => htmlspecialchars($data['email']),
+        ];
+
+        // Zusatzfelder hinzufügen
+        if (!empty($data['fields'])) {
+            foreach ($this->config['booking_form']['additional_fields'] as $field) {
+                if (!empty($data['fields'][$field['name']])) {
+                    $rows[htmlspecialchars($field['label'])] = htmlspecialchars($data['fields'][$field['name']]);
+                }
+            }
+        }
+
+        // Weitere Teilnehmer
+        if (!empty($data['additional_attendees'])) {
+            $rows['Weitere Teilnehmer'] = htmlspecialchars(implode(', ', $data['additional_attendees']));
+        }
+
+        $i = 0;
+        foreach ($rows as $label => $value) {
+            $bg = ($i++ % 2 === 0) ? '#f8f9fa' : '#ffffff';
+            $html .= '<tr style="background:' . $bg . '">';
+            $html .= '<td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #eee">' . $label . '</td>';
+            $html .= '<td style="padding:8px 12px;border-bottom:1px solid #eee">' . $value . '</td>';
+            $html .= '</tr>';
+        }
+
+        $html .= '</table>';
+
+        if (!empty($teamsLink)) {
+            $html .= '<p style="margin-top:16px"><a href="' . htmlspecialchars($teamsLink)
+                . '" style="background:#6264a7;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block">'
+                . 'Teams-Meeting beitreten</a></p>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
     }
 
     private function buildDescription(array $data): string
