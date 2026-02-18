@@ -109,16 +109,23 @@ body {
 }
 
 .welcome-text {
-    color: var(--gray-500);
+    color: var(--gray-900);
     font-size: 15px;
-    margin: 0 auto;
+    max-width: 80%;
+    margin-left: auto;
+    margin-right: 0;
+    text-align: right;
     line-height: 1.5;
 }
 
 .booking-info-text {
-    color: var(--gray-500);
+    color: var(--gray-900);
     font-size: 14px;
+    max-width: 80%;
+    margin-left: auto;
+    margin-right: 0;
     margin-bottom: 20px;
+    text-align: right;
     line-height: 1.5;
 }
 
