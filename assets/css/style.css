@@ -207,6 +207,7 @@ body {
 /* Calendar & Time Layout */
 .calendar-time-wrapper {
     display: flex;
+    flex-direction: row-reverse;
     gap: 24px;
     align-items: flex-start;
     justify-content: center;
@@ -726,10 +727,7 @@ body {
 
     .calendar-container {
         max-width: 100%;
-    }
-
-    .calendar-container {
-        order: -1;
+        flex: auto;
     }
 
     .time-slots-container {

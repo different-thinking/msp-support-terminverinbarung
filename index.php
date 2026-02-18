@@ -82,8 +82,6 @@ $bookingInfo = $design['booking_info'] ?? '';
         <?php endif; ?>
 
         <div class="calendar-time-wrapper">
-            <div id="time-slots-container" class="time-slots-container hidden"></div>
-
             <div class="calendar-container">
                 <div class="calendar-nav">
                     <button id="btn-prev-month" type="button" disabled>&larr;</button>
@@ -93,6 +91,8 @@ $bookingInfo = $design['booking_info'] ?? '';
 
                 <div id="calendar-grid" class="calendar-grid"></div>
             </div>
+
+            <div id="time-slots-container" class="time-slots-container hidden"></div>
         </div>
 
         <div class="btn-group">
