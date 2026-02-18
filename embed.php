@@ -17,7 +17,7 @@ $organizerName = $config['organizer']['name'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($appName) ?></title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?= time() ?>">
     <style>
         body {
             background: transparent;
@@ -61,17 +61,19 @@ $organizerName = $config['organizer']['name'];
     <div id="panel-calendar" class="booking-panel active">
         <h2 class="panel-title">Wählen Sie Datum und Uhrzeit</h2>
 
-        <div class="calendar-container">
-            <div class="calendar-nav">
-                <button id="btn-prev-month" type="button" disabled>&larr;</button>
-                <span id="calendar-month-year" class="calendar-month-year"></span>
-                <button id="btn-next-month" type="button">&rarr;</button>
+        <div class="calendar-time-wrapper">
+            <div class="calendar-container">
+                <div class="calendar-nav">
+                    <button id="btn-prev-month" type="button" disabled>&larr;</button>
+                    <span id="calendar-month-year" class="calendar-month-year"></span>
+                    <button id="btn-next-month" type="button">&rarr;</button>
+                </div>
+
+                <div id="calendar-grid" class="calendar-grid"></div>
             </div>
 
-            <div id="calendar-grid" class="calendar-grid"></div>
+            <div id="time-slots-container" class="time-slots-container hidden"></div>
         </div>
-
-        <div id="time-slots-container" class="time-slots-container" style="display: none;"></div>
 
         <div class="btn-group">
             <span></span>
@@ -186,7 +188,7 @@ $organizerName = $config['organizer']['name'];
     </div>
 </div>
 
-<script src="assets/js/app.js"></script>
+<script src="assets/js/app.js?v=<?= time() ?>"></script>
 <script>
 // iframe-Höhe automatisch an Parent melden
 (function() {
