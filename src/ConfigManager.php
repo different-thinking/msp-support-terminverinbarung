@@ -168,6 +168,11 @@ class ConfigManager
                 'saturday'  => null,
                 'sunday'    => null,
             ],
+            'break_time' => [
+                'enabled' => false,
+                'start' => '12:00',
+                'end' => '13:00',
+            ],
             'calendar_sources' => [],
             'teams' => [
                 'enabled' => true,

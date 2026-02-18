@@ -276,6 +276,31 @@ foreach ($config['calendar_sources'] as $src) {
                     </div>
                 </div>
                 <?php endforeach; ?>
+
+                <hr style="border:none;border-top:1px solid var(--gray-100);margin:24px 0 16px;">
+                <h3 class="card-section-title" style="margin-bottom:12px;">Tägliche Pause</h3>
+                <p class="text-muted" style="margin-bottom:12px;">Pausenzeit, die jeden Tag als nicht buchbar gilt</p>
+                <?php
+                    $breakConf = $config['break_time'] ?? ['enabled' => false, 'start' => '12:00', 'end' => '13:00'];
+                    $breakEnabled = !empty($breakConf['enabled']);
+                    $breakStart = $breakConf['start'] ?? '12:00';
+                    $breakEnd = $breakConf['end'] ?? '13:00';
+                ?>
+                <div class="hours-row">
+                    <label class="hours-toggle">
+                        <input type="checkbox" id="break-enabled"
+                               <?= $breakEnabled ? 'checked' : '' ?>>
+                        <span class="hours-day-label">Pause</span>
+                    </label>
+                    <div class="hours-times <?= !$breakEnabled ? 'disabled' : '' ?>" id="break-times">
+                        <input type="time" id="break-start"
+                               value="<?= htmlspecialchars($breakStart) ?>" <?= !$breakEnabled ? 'disabled' : '' ?>>
+                        <span class="hours-separator">&ndash;</span>
+                        <input type="time" id="break-end"
+                               value="<?= htmlspecialchars($breakEnd) ?>" <?= !$breakEnabled ? 'disabled' : '' ?>>
+                    </div>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Speichern</button>
                 </div>
