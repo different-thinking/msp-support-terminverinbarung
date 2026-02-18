@@ -493,6 +493,89 @@
         }).catch(() => { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
     });
 
+    // ==================== Form: Seitendesign ====================
+
+    // Image upload
+    document.querySelectorAll('.image-upload-input').forEach(function (input) {
+        input.addEventListener('change', function () {
+            var file = this.files[0];
+            if (!file) return;
+            var field = this.dataset.field;
+            var label = this.closest('.image-upload-area').querySelector('.image-upload-btn');
+            var formData = new FormData();
+            formData.append('image', file);
+            formData.append('field', field);
+
+            label.classList.add('uploading');
+            label.querySelector('span').textContent = 'Wird hochgeladen...';
+
+            fetch(API + '?action=upload-image', {
+                method: 'POST',
+                body: formData,
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    label.classList.remove('uploading');
+                    label.querySelector('span').textContent = 'Bild hochladen';
+                    if (res.success) {
+                        showToast('Bild hochgeladen');
+                        var preview = document.getElementById(field.replace('_', '-') + '-preview');
+                        preview.querySelector('img').src = '../' + res.path;
+                        preview.style.display = '';
+                        label.style.display = 'none';
+                    } else {
+                        showToast(res.error || 'Upload fehlgeschlagen', 'error');
+                    }
+                })
+                .catch(function () {
+                    label.classList.remove('uploading');
+                    label.querySelector('span').textContent = 'Bild hochladen';
+                    showToast('Verbindungsfehler', 'error');
+                });
+
+            this.value = '';
+        });
+    });
+
+    // Image delete
+    document.querySelectorAll('.btn-remove-image').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var field = this.dataset.field;
+            if (!confirm('Bild wirklich entfernen?')) return;
+            apiPost('delete-image', { field: field }).then(function (res) {
+                if (res.success) {
+                    showToast('Bild entfernt');
+                    var preview = document.getElementById(field.replace('_', '-') + '-preview');
+                    preview.style.display = 'none';
+                    var label = document.getElementById(field.replace('_', '-') + '-upload-label');
+                    label.style.display = '';
+                } else {
+                    showToast(res.error || 'Fehler', 'error');
+                }
+            });
+        });
+    });
+
+    // Text form
+    var designForm = document.getElementById('form-page-design');
+    if (designForm) {
+        designForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+
+            apiPost('save-page-design', {
+                welcome_title: document.getElementById('design-welcome-title').value,
+                welcome_text: document.getElementById('design-welcome-text').value,
+                booking_info: document.getElementById('design-booking-info').value,
+            }).then(function (res) {
+                setLoading(btn, false);
+                if (res.success) showToast('Texte gespeichert');
+                else showToast(res.error || 'Fehler', 'error');
+            }).catch(function () { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
+        });
+    }
+
     // ==================== ESC schließt Modals ====================
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeSourceModal();

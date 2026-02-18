@@ -2,6 +2,10 @@
 data/tokens.json
 data/config.json
 
+# Uploads (Bilder werden zur Laufzeit hochgeladen)
+assets/uploads/*
+!assets/uploads/.gitkeep
+
 # IDE
 .idea/
 .vscode/

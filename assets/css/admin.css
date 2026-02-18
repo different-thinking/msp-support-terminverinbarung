@@ -804,3 +804,82 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ==================== Image Upload (Seitendesign) ==================== */
+
+.image-upload-area {
+    margin-bottom: 8px;
+}
+
+.image-preview {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 12px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--gray-200);
+}
+
+.image-preview img {
+    display: block;
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+}
+
+.image-preview.profile-preview img {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.image-preview.profile-preview {
+    border: none;
+}
+
+.btn-remove-image {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.btn-remove-image:hover {
+    background: var(--error);
+}
+
+.image-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 2px dashed var(--gray-300);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--gray-500);
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.image-upload-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-light);
+}
+
+.image-upload-btn.uploading {
+    opacity: 0.6;
+    pointer-events: none;
+}
