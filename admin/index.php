@@ -1,25 +1,25 @@
 <?php
 /**
- * Admin-Panel: Kalender-Verbindungen verwalten.
- * Hier werden OAuth-Tokens für die Kalender-Quellen eingerichtet.
+ * Admin-Panel: Komplette Konfiguration der Terminbuchungs-App.
  */
 session_start();
 
-require_once __DIR__ . '/../src/BookingService.php';
+require_once __DIR__ . '/../src/ConfigManager.php';
+require_once __DIR__ . '/../src/TokenStore.php';
 
-$config = require __DIR__ . '/../config.php';
-$service = new BookingService();
-$tokenStore = $service->getTokenStore();
+$cm = new ConfigManager();
+$config = $cm->getAppConfig();
+$tokenStore = new TokenStore($config['token_store']['path']);
 
-// Einfache Passwort-Authentifizierung
+// Authentifizierung
 $authenticated = false;
 $authError = '';
 
-if (!empty($config['admin']['password_hash'])) {
+if ($cm->hasAdminPassword()) {
     if (isset($_SESSION['admin_auth']) && $_SESSION['admin_auth'] === true) {
         $authenticated = true;
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
-        if (password_verify($_POST['password'], $config['admin']['password_hash'])) {
+        if ($cm->verifyAdminPassword($_POST['password'])) {
             $_SESSION['admin_auth'] = true;
             $authenticated = true;
         } else {
@@ -27,7 +27,6 @@ if (!empty($config['admin']['password_hash'])) {
         }
     }
 } else {
-    // Kein Passwort konfiguriert - Warnung anzeigen
     $authenticated = true;
 }
 
@@ -38,12 +37,21 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
-// Disconnect
-if (isset($_GET['disconnect']) && $authenticated) {
-    $sourceId = $_GET['disconnect'];
-    $tokenStore->remove($sourceId);
-    header('Location: index.php?msg=disconnected');
-    exit;
+// Flash-Messages (z.B. nach OAuth-Callback)
+$flashMsg = '';
+$flashType = '';
+if (isset($_GET['msg'])) {
+    switch ($_GET['msg']) {
+        case 'connected': $flashMsg = 'Kalender erfolgreich verbunden!'; $flashType = 'success'; break;
+        case 'disconnected': $flashMsg = 'Kalender-Verbindung getrennt.'; $flashType = 'info'; break;
+        case 'error': $flashMsg = 'Fehler bei der Authentifizierung.'; $flashType = 'error'; break;
+    }
+}
+
+// Kalender-Verbindungsstatus
+$calendarStatus = [];
+foreach ($config['calendar_sources'] as $src) {
+    $calendarStatus[$src['id']] = $tokenStore->has($src['id']);
 }
 ?>
 <!DOCTYPE html>
@@ -51,99 +59,14 @@ if (isset($_GET['disconnect']) && $authenticated) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin – Terminbuchung</title>
+    <title>Admin – <?= htmlspecialchars($config['app']['name'] ?: 'Terminbuchung') ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
-    <style>
-        .admin-card {
-            background: white;
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            padding: 24px;
-            margin-bottom: 20px;
-        }
-        .admin-card h3 {
-            font-size: 18px;
-            margin-bottom: 4px;
-        }
-        .admin-card .type-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .type-badge.microsoft { background: #dbeafe; color: #1e40af; }
-        .type-badge.google { background: #fef3c7; color: #92400e; }
-        .status {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        .status.connected { background: var(--success-light); color: var(--success); }
-        .status.disconnected { background: var(--error-light); color: var(--error); }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-        .status.connected .status-dot { background: var(--success); }
-        .status.disconnected .status-dot { background: var(--error); }
-        .admin-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 16px;
-        }
-        .admin-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 32px;
-        }
-        .login-box {
-            max-width: 400px;
-            margin: 80px auto;
-        }
-        .info-box {
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            border-radius: var(--radius);
-            padding: 16px;
-            margin-bottom: 24px;
-            font-size: 14px;
-            color: #1e40af;
-        }
-        .warning-box {
-            background: #fef3c7;
-            border: 1px solid #fcd34d;
-            border-radius: var(--radius);
-            padding: 16px;
-            margin-bottom: 24px;
-            font-size: 14px;
-            color: #92400e;
-        }
-        .source-meta {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            margin: 8px 0;
-        }
-        .calendar-list {
-            font-size: 13px;
-            color: var(--gray-500);
-            margin-top: 4px;
-        }
-    </style>
+    <link rel="stylesheet" href="../assets/css/admin.css">
 </head>
 <body>
-<div class="container">
 
 <?php if (!$authenticated): ?>
-    <!-- Login -->
+<div class="container">
     <div class="login-box">
         <div class="admin-card">
             <h2 class="panel-title">Admin-Zugang</h2>
@@ -159,92 +82,507 @@ if (isset($_GET['disconnect']) && $authenticated) {
             </form>
         </div>
     </div>
+</div>
 <?php else: ?>
 
-    <div class="admin-header">
-        <h1>Kalender-Verbindungen</h1>
-        <?php if (!empty($config['admin']['password_hash'])): ?>
-            <a href="?logout=1" class="btn btn-secondary">Abmelden</a>
-        <?php endif; ?>
-    </div>
-
-    <?php if (empty($config['admin']['password_hash'])): ?>
-        <div class="warning-box">
-            <strong>Achtung:</strong> Kein Admin-Passwort konfiguriert. Bitte setzen Sie
-            <code>admin.password_hash</code> in der <code>config.php</code>.
-            <br>Generieren: <code>php -r "echo password_hash('IhrPasswort', PASSWORD_DEFAULT);"</code>
+<div class="admin-layout">
+    <!-- Sidebar -->
+    <aside class="admin-sidebar">
+        <div class="sidebar-header">
+            <h2>Terminbuchung</h2>
+            <span class="sidebar-subtitle">Administration</span>
         </div>
-    <?php endif; ?>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" data-tab="general">
+                <span class="nav-icon">&#9881;</span> Allgemein
+            </a>
+            <a href="#" class="nav-item" data-tab="organizer">
+                <span class="nav-icon">&#128100;</span> Organisator
+            </a>
+            <a href="#" class="nav-item" data-tab="hours">
+                <span class="nav-icon">&#128339;</span> Arbeitszeiten
+            </a>
+            <a href="#" class="nav-item" data-tab="calendars">
+                <span class="nav-icon">&#128197;</span> Kalender
+            </a>
+            <a href="#" class="nav-item" data-tab="form">
+                <span class="nav-icon">&#128221;</span> Buchungsformular
+            </a>
+            <a href="#" class="nav-item" data-tab="teams">
+                <span class="nav-icon">&#128247;</span> Teams-Meeting
+            </a>
+            <a href="#" class="nav-item" data-tab="access">
+                <span class="nav-icon">&#128274;</span> Zugang
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="../" class="nav-item" target="_blank">
+                <span class="nav-icon">&#8599;</span> Buchungsseite
+            </a>
+            <?php if ($cm->hasAdminPassword()): ?>
+            <a href="?logout=1" class="nav-item">
+                <span class="nav-icon">&#9211;</span> Abmelden
+            </a>
+            <?php endif; ?>
+        </div>
+    </aside>
 
-    <?php if (isset($_GET['msg'])): ?>
-        <?php if ($_GET['msg'] === 'connected'): ?>
-            <div class="alert alert-info" style="background: var(--success-light); color: var(--success); border-color: #86efac;">
-                Kalender erfolgreich verbunden!
-            </div>
-        <?php elseif ($_GET['msg'] === 'disconnected'): ?>
-            <div class="alert alert-info">Kalender-Verbindung getrennt.</div>
-        <?php elseif ($_GET['msg'] === 'error'): ?>
-            <div class="alert alert-error">Fehler bei der Authentifizierung. Bitte versuchen Sie es erneut.</div>
+    <!-- Main Content -->
+    <main class="admin-main">
+        <div id="toast-container"></div>
+
+        <?php if ($flashMsg): ?>
+        <div class="alert alert-<?= $flashType === 'success' ? 'info' : $flashType ?>"
+             style="<?= $flashType === 'success' ? 'background:var(--success-light);color:var(--success);border-color:#86efac;' : '' ?>">
+            <?= htmlspecialchars($flashMsg) ?>
+        </div>
         <?php endif; ?>
-    <?php endif; ?>
 
-    <div class="info-box">
-        Verbinden Sie hier Ihre Kalender. Die App prüft die Verfügbarkeit über alle
-        verbundenen Kalender hinweg. Neue Termine werden im als "Buchungsziel" markierten
-        Kalender erstellt.
-    </div>
+        <?php if (!$cm->hasAdminPassword()): ?>
+        <div class="alert alert-warning">
+            <strong>Achtung:</strong> Kein Admin-Passwort gesetzt. Bitte konfigurieren Sie eines unter "Zugang".
+        </div>
+        <?php endif; ?>
 
-    <?php foreach ($config['calendar_sources'] as $source): ?>
-        <?php
-        $isConnected = $tokenStore->has($source['id']);
-        $calService = $service->getCalendarServiceBySourceId($source['id']);
-        ?>
-        <div class="admin-card">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <h3><?= htmlspecialchars($source['label']) ?></h3>
-                    <div class="source-meta">
-                        <span class="type-badge <?= $source['type'] ?>"><?= $source['type'] === 'microsoft' ? 'Microsoft 365' : 'Google' ?></span>
-                        <?php if (!empty($source['is_booking_target'])): ?>
-                            <span class="type-badge" style="background: #d1fae5; color: #065f46;">Buchungsziel</span>
+        <!-- ==================== Tab: Allgemein ==================== -->
+        <section id="tab-general" class="tab-content active">
+            <div class="tab-header">
+                <h1>Allgemeine Einstellungen</h1>
+                <p>Grundkonfiguration der Buchungsseite</p>
+            </div>
+            <form id="form-general" class="admin-card">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="app-name">Name der Buchungsseite</label>
+                        <input type="text" id="app-name" name="name"
+                               value="<?= htmlspecialchars($config['app']['name']) ?>"
+                               placeholder="z.B. Terminbuchung">
+                    </div>
+                    <div class="form-group">
+                        <label for="app-url">URL der App</label>
+                        <input type="url" id="app-url" name="url"
+                               value="<?= htmlspecialchars($config['app']['url']) ?>"
+                               placeholder="https://termine.example.com">
+                        <div class="form-hint">Wird für OAuth-Redirects benötigt</div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="app-timezone">Zeitzone</label>
+                        <select id="app-timezone" name="timezone">
+                            <?php
+                            $timezones = ['Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'UTC'];
+                            foreach ($timezones as $tz): ?>
+                                <option value="<?= $tz ?>" <?= $config['app']['timezone'] === $tz ? 'selected' : '' ?>><?= $tz ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="app-duration">Termindauer (Minuten)</label>
+                        <input type="number" id="app-duration" name="appointment_duration_minutes"
+                               value="<?= (int)$config['app']['appointment_duration_minutes'] ?>" min="15" step="15">
+                    </div>
+                </div>
+                <div class="form-row form-row-3">
+                    <div class="form-group">
+                        <label for="app-horizon">Buchungshorizont (Tage)</label>
+                        <input type="number" id="app-horizon" name="booking_horizon_days"
+                               value="<?= (int)$config['app']['booking_horizon_days'] ?>" min="1">
+                        <div class="form-hint">Wie weit in die Zukunft buchbar</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="app-notice">Vorlaufzeit (Stunden)</label>
+                        <input type="number" id="app-notice" name="min_notice_hours"
+                               value="<?= (int)$config['app']['min_notice_hours'] ?>" min="0">
+                        <div class="form-hint">Mindestens X Stunden im Voraus</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="app-interval">Slot-Intervall (Minuten)</label>
+                        <input type="number" id="app-interval" name="slot_interval_minutes"
+                               value="<?= (int)$config['app']['slot_interval_minutes'] ?>" min="5" step="5">
+                        <div class="form-hint">Abstand zwischen Zeitslots</div>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== Tab: Organisator ==================== -->
+        <section id="tab-organizer" class="tab-content">
+            <div class="tab-header">
+                <h1>Organisator</h1>
+                <p>Ihre Informationen, die in Termineinladungen erscheinen</p>
+            </div>
+            <form id="form-organizer" class="admin-card">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="org-name">Name</label>
+                        <input type="text" id="org-name" name="name"
+                               value="<?= htmlspecialchars($config['organizer']['name']) ?>"
+                               placeholder="Max Mustermann">
+                    </div>
+                    <div class="form-group">
+                        <label for="org-email">E-Mail-Adresse</label>
+                        <input type="email" id="org-email" name="email"
+                               value="<?= htmlspecialchars($config['organizer']['email']) ?>"
+                               placeholder="max@example.com">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== Tab: Arbeitszeiten ==================== -->
+        <section id="tab-hours" class="tab-content">
+            <div class="tab-header">
+                <h1>Arbeitszeiten</h1>
+                <p>Definieren Sie, wann Termine buchbar sind</p>
+            </div>
+            <form id="form-hours" class="admin-card">
+                <?php
+                $dayLabels = [
+                    'monday' => 'Montag', 'tuesday' => 'Dienstag', 'wednesday' => 'Mittwoch',
+                    'thursday' => 'Donnerstag', 'friday' => 'Freitag', 'saturday' => 'Samstag', 'sunday' => 'Sonntag',
+                ];
+                foreach ($dayLabels as $dayKey => $dayLabel):
+                    $dayConf = $config['working_hours'][$dayKey] ?? null;
+                    $enabled = $dayConf !== null;
+                    $start = $dayConf['start'] ?? '09:00';
+                    $end = $dayConf['end'] ?? '17:00';
+                ?>
+                <div class="hours-row">
+                    <label class="hours-toggle">
+                        <input type="checkbox" class="hours-enabled" data-day="<?= $dayKey ?>"
+                               <?= $enabled ? 'checked' : '' ?>>
+                        <span class="hours-day-label"><?= $dayLabel ?></span>
+                    </label>
+                    <div class="hours-times <?= !$enabled ? 'disabled' : '' ?>">
+                        <input type="time" class="hours-start" data-day="<?= $dayKey ?>"
+                               value="<?= $start ?>" <?= !$enabled ? 'disabled' : '' ?>>
+                        <span class="hours-separator">–</span>
+                        <input type="time" class="hours-end" data-day="<?= $dayKey ?>"
+                               value="<?= $end ?>" <?= !$enabled ? 'disabled' : '' ?>>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== Tab: Kalender ==================== -->
+        <section id="tab-calendars" class="tab-content">
+            <div class="tab-header">
+                <h1>Kalender-Quellen</h1>
+                <p>Verbinden Sie Google- und Microsoft 365-Kalender zur Verfügbarkeitsermittlung</p>
+            </div>
+
+            <div class="info-box">
+                Die App prüft die Verfügbarkeit über alle verbundenen Kalender hinweg.
+                Der als <strong>Buchungsziel</strong> markierte M365-Kalender wird zum Erstellen
+                neuer Termine und Versenden der Einladungen verwendet.
+            </div>
+
+            <div id="calendar-sources-list">
+                <?php foreach ($config['calendar_sources'] as $src):
+                    $isConnected = $calendarStatus[$src['id']] ?? false;
+                ?>
+                <div class="admin-card calendar-source-card" data-id="<?= htmlspecialchars($src['id']) ?>">
+                    <div class="card-header">
+                        <div>
+                            <h3><?= htmlspecialchars($src['label'] ?: $src['id']) ?></h3>
+                            <div class="source-meta">
+                                <span class="type-badge <?= $src['type'] ?>">
+                                    <?= $src['type'] === 'microsoft' ? 'Microsoft 365' : 'Google' ?>
+                                </span>
+                                <?php if (!empty($src['is_booking_target'])): ?>
+                                    <span class="type-badge booking-target">Buchungsziel</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="source-detail">
+                                Kalender: <?= htmlspecialchars(implode(', ', $src['calendars'] ?? ['primary'])) ?>
+                            </div>
+                        </div>
+                        <div>
+                            <?php if ($isConnected): ?>
+                                <span class="status connected"><span class="status-dot"></span> Verbunden</span>
+                            <?php else: ?>
+                                <span class="status disconnected"><span class="status-dot"></span> Nicht verbunden</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button type="button" class="btn btn-secondary btn-sm btn-edit-source"
+                                data-source='<?= htmlspecialchars(json_encode($src, JSON_UNESCAPED_UNICODE)) ?>'>
+                            Bearbeiten
+                        </button>
+                        <?php if ($isConnected): ?>
+                            <button type="button" class="btn btn-secondary btn-sm btn-disconnect-source"
+                                    data-id="<?= htmlspecialchars($src['id']) ?>">
+                                Trennen
+                            </button>
+                        <?php elseif (!empty($src['client_id'])): ?>
+                            <?php
+                            require_once __DIR__ . '/../src/BookingService.php';
+                            $svc = new BookingService();
+                            $calSvc = $svc->getCalendarServiceBySourceId($src['id']);
+                            if ($calSvc): ?>
+                                <a href="<?= htmlspecialchars($calSvc->getAuthUrl($src['id'])) ?>"
+                                   class="btn btn-primary btn-sm">
+                                    Verbinden
+                                </a>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span class="text-muted">Client-ID fehlt</span>
                         <?php endif; ?>
-                    </div>
-                    <div class="calendar-list">
-                        Kalender: <?= htmlspecialchars(implode(', ', $source['calendars'])) ?>
+                        <button type="button" class="btn btn-danger btn-sm btn-delete-source"
+                                data-id="<?= htmlspecialchars($src['id']) ?>"
+                                data-label="<?= htmlspecialchars($src['label']) ?>">
+                            Entfernen
+                        </button>
                     </div>
                 </div>
-                <div>
-                    <?php if ($isConnected): ?>
-                        <span class="status connected"><span class="status-dot"></span> Verbunden</span>
-                    <?php else: ?>
-                        <span class="status disconnected"><span class="status-dot"></span> Nicht verbunden</span>
-                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+
+            <button type="button" id="btn-add-source" class="btn btn-primary" style="margin-top: 16px;">
+                + Kalender-Quelle hinzufügen
+            </button>
+
+            <!-- Modal: Kalender bearbeiten/neu -->
+            <div id="modal-source" class="modal" style="display:none;">
+                <div class="modal-backdrop"></div>
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 id="modal-source-title">Kalender-Quelle</h2>
+                        <button type="button" class="modal-close">&times;</button>
+                    </div>
+                    <form id="form-source">
+                        <input type="hidden" id="source-id" name="id">
+                        <div class="form-group">
+                            <label for="source-type">Typ</label>
+                            <select id="source-type" name="type">
+                                <option value="microsoft">Microsoft 365</option>
+                                <option value="google">Google</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="source-label">Bezeichnung</label>
+                            <input type="text" id="source-label" name="label"
+                                   placeholder="z.B. Microsoft 365 Hauptkonto" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="source-client-id">Client-ID</label>
+                                <input type="text" id="source-client-id" name="client_id"
+                                       placeholder="Application (client) ID">
+                            </div>
+                            <div class="form-group">
+                                <label for="source-client-secret">Client Secret</label>
+                                <input type="password" id="source-client-secret" name="client_secret"
+                                       placeholder="Client Secret">
+                                <div class="form-hint" id="secret-hint" style="display:none;">
+                                    Secret ist gesetzt. Leer lassen um beizubehalten.
+                                </div>
+                            </div>
+                        </div>
+                        <div id="ms-fields">
+                            <div class="form-group">
+                                <label for="source-tenant">Tenant-ID</label>
+                                <input type="text" id="source-tenant" name="tenant_id"
+                                       value="common" placeholder="common oder Tenant-ID">
+                                <div class="form-hint">"common" für Multi-Tenant oder spezifische Tenant-ID</div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="source-calendars">Kalender-IDs</label>
+                            <input type="text" id="source-calendars" name="calendars"
+                                   value="primary" placeholder="primary, zweiter-kalender">
+                            <div class="form-hint">Kommasepariert. "primary" für den Hauptkalender.</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="source-redirect">Redirect-URI (optional)</label>
+                            <input type="url" id="source-redirect" name="redirect_uri"
+                                   placeholder="Automatisch wenn leer">
+                            <div class="form-hint">Leer lassen für automatische Erkennung</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="source-booking-target" name="is_booking_target">
+                                <span>Als Buchungsziel verwenden</span>
+                            </label>
+                            <div class="form-hint">Termine werden in diesen Kalender eingetragen und Einladungen über diesen Account versendet</div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary modal-cancel">Abbrechen</button>
+                            <button type="submit" class="btn btn-primary">Speichern</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== Tab: Buchungsformular ==================== -->
+        <section id="tab-form" class="tab-content">
+            <div class="tab-header">
+                <h1>Buchungsformular</h1>
+                <p>Konfigurieren Sie die Felder, die der Buchende ausfüllen muss</p>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">Standardfelder</h3>
+                <p class="text-muted" style="margin-bottom:12px;">Immer enthalten, nicht änderbar.</p>
+                <div class="fixed-fields">
+                    <div class="fixed-field">Vorname <span class="badge">Pflicht</span></div>
+                    <div class="fixed-field">Nachname <span class="badge">Pflicht</span></div>
+                    <div class="fixed-field">E-Mail <span class="badge">Pflicht</span></div>
                 </div>
             </div>
 
-            <div class="admin-actions">
-                <?php if ($isConnected): ?>
-                    <a href="?disconnect=<?= urlencode($source['id']) ?>" class="btn btn-secondary"
-                       onclick="return confirm('Verbindung wirklich trennen?')">
-                        Verbindung trennen
-                    </a>
-                <?php else: ?>
-                    <?php if (empty($source['client_id'])): ?>
-                        <span style="color: var(--gray-400); font-size: 13px;">
-                            Client-ID nicht konfiguriert. Bitte <code>config.php</code> bearbeiten.
-                        </span>
-                    <?php elseif ($calService): ?>
-                        <a href="<?= htmlspecialchars($calService->getAuthUrl($source['id'])) ?>" class="btn btn-primary">
-                            Jetzt verbinden
-                        </a>
-                    <?php endif; ?>
+            <form id="form-booking-fields" class="admin-card">
+                <h3 class="card-section-title">Zusätzliche Felder</h3>
+                <div id="custom-fields-list">
+                    <?php foreach ($config['booking_form']['additional_fields'] as $i => $field): ?>
+                    <div class="custom-field-row" data-index="<?= $i ?>">
+                        <div class="field-drag-handle" title="Ziehen zum Sortieren">&#9776;</div>
+                        <div class="field-config">
+                            <div class="form-row form-row-4">
+                                <div class="form-group">
+                                    <label>Feldname</label>
+                                    <input type="text" class="cf-name"
+                                           value="<?= htmlspecialchars($field['name']) ?>"
+                                           placeholder="feldname" pattern="[a-z0-9_]+">
+                                </div>
+                                <div class="form-group">
+                                    <label>Bezeichnung</label>
+                                    <input type="text" class="cf-label"
+                                           value="<?= htmlspecialchars($field['label']) ?>"
+                                           placeholder="Anzeigename">
+                                </div>
+                                <div class="form-group">
+                                    <label>Typ</label>
+                                    <select class="cf-type">
+                                        <?php foreach (['text' => 'Text', 'email' => 'E-Mail', 'tel' => 'Telefon', 'url' => 'URL', 'number' => 'Zahl', 'textarea' => 'Textbereich'] as $t => $tl): ?>
+                                            <option value="<?= $t ?>" <?= ($field['type'] ?? 'text') === $t ? 'selected' : '' ?>><?= $tl ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Platzhalter</label>
+                                    <input type="text" class="cf-placeholder"
+                                           value="<?= htmlspecialchars($field['placeholder'] ?? '') ?>">
+                                </div>
+                            </div>
+                            <label class="checkbox-label">
+                                <input type="checkbox" class="cf-required"
+                                       <?= !empty($field['required']) ? 'checked' : '' ?>>
+                                <span>Pflichtfeld</span>
+                            </label>
+                        </div>
+                        <button type="button" class="btn-remove-field" title="Entfernen">&times;</button>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <button type="button" id="btn-add-field" class="btn btn-secondary" style="margin-top:12px;">
+                    + Feld hinzufügen
+                </button>
+
+                <hr class="form-divider">
+
+                <h3 class="card-section-title">Teilnehmer-Optionen</h3>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="allow-attendees"
+                               <?= !empty($config['booking_form']['allow_additional_attendees']) ? 'checked' : '' ?>>
+                        <span>Buchende können weitere Teilnehmer hinzufügen</span>
+                    </label>
+                </div>
+                <div class="form-group" id="max-attendees-group">
+                    <label for="max-attendees">Maximale Anzahl</label>
+                    <input type="number" id="max-attendees"
+                           value="<?= (int)$config['booking_form']['max_additional_attendees'] ?>"
+                           min="1" max="20" style="max-width:120px;">
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== Tab: Teams ==================== -->
+        <section id="tab-teams" class="tab-content">
+            <div class="tab-header">
+                <h1>Microsoft Teams</h1>
+                <p>Automatische Teams-Meeting-Erstellung für gebuchte Termine</p>
+            </div>
+            <form id="form-teams" class="admin-card">
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="teams-enabled"
+                               <?= !empty($config['teams']['enabled']) ? 'checked' : '' ?>>
+                        <span>Teams-Meeting automatisch erstellen</span>
+                    </label>
+                    <div class="form-hint">Jeder gebuchte Termin erhält automatisch einen Teams-Meeting-Link</div>
+                </div>
+                <div class="form-group" id="teams-source-group">
+                    <label for="teams-source">M365-Account für Teams</label>
+                    <select id="teams-source" name="source_id">
+                        <option value="">– Bitte wählen –</option>
+                        <?php foreach ($config['calendar_sources'] as $src):
+                            if ($src['type'] !== 'microsoft') continue; ?>
+                            <option value="<?= htmlspecialchars($src['id']) ?>"
+                                <?= ($config['teams']['source_id'] ?? '') === $src['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($src['label'] ?: $src['id']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== Tab: Zugang ==================== -->
+        <section id="tab-access" class="tab-content">
+            <div class="tab-header">
+                <h1>Admin-Zugang</h1>
+                <p>Passwort für die Administrationsoberfläche</p>
+            </div>
+            <form id="form-password" class="admin-card">
+                <?php if ($cm->hasAdminPassword()): ?>
+                <div class="form-group">
+                    <label for="current-password">Aktuelles Passwort</label>
+                    <input type="password" id="current-password" required>
+                </div>
                 <?php endif; ?>
-            </div>
-        </div>
-    <?php endforeach; ?>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="new-password">Neues Passwort</label>
+                        <input type="password" id="new-password" minlength="6" required>
+                        <div class="form-hint">Mindestens 6 Zeichen</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Passwort bestätigen</label>
+                        <input type="password" id="confirm-password" required>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Passwort speichern</button>
+                </div>
+            </form>
+        </section>
 
-<?php endif; ?>
-
+    </main>
 </div>
+
+<script src="../assets/js/admin.js"></script>
+<?php endif; ?>
 </body>
 </html>

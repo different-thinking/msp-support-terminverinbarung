@@ -1,8 +1,6 @@
-# Token-Daten (OAuth-Secrets)
+# Laufzeitdaten (Credentials, OAuth-Tokens, Konfiguration)
 data/tokens.json
-
-# Konfiguration mit echten Credentials
-# config.php  ← Einkommentieren wenn echte Credentials enthalten
+data/config.json
 
 # IDE
 .idea/
