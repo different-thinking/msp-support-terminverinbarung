@@ -134,6 +134,22 @@
         });
     });
 
+    // Toggle: Pause aktivieren/deaktivieren
+    const breakCheckbox = document.getElementById('break-enabled');
+    if (breakCheckbox) {
+        breakCheckbox.addEventListener('change', function () {
+            const timesDiv = document.getElementById('break-times');
+            const inputs = timesDiv.querySelectorAll('input');
+            if (this.checked) {
+                timesDiv.classList.remove('disabled');
+                inputs.forEach(i => i.disabled = false);
+            } else {
+                timesDiv.classList.add('disabled');
+                inputs.forEach(i => i.disabled = true);
+            }
+        });
+    }
+
     document.getElementById('form-hours').addEventListener('submit', function (e) {
         e.preventDefault();
         const btn = this.querySelector('button[type="submit"]');
@@ -147,6 +163,13 @@
             const end = document.querySelector(`.hours-end[data-day="${day}"]`).value;
             data[day] = { enabled: enabled, start: start, end: end };
         });
+
+        // Pausenzeit mitsenden
+        data.break_time = {
+            enabled: document.getElementById('break-enabled').checked,
+            start: document.getElementById('break-start').value,
+            end: document.getElementById('break-end').value,
+        };
 
         apiPost('save-working-hours', data).then(res => {
             setLoading(btn, false);

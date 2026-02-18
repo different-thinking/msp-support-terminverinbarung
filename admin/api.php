@@ -91,6 +91,15 @@ try {
                 }
             }
             $cm->saveSection('working_hours', $hours);
+
+            // Pausenzeit speichern
+            $breakTime = [
+                'enabled' => !empty($input['break_time']['enabled']),
+                'start' => $input['break_time']['start'] ?? '12:00',
+                'end' => $input['break_time']['end'] ?? '13:00',
+            ];
+            $cm->saveSection('break_time', $breakTime);
+
             jsonResponse(['success' => true]);
             break;
 

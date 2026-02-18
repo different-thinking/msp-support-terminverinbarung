@@ -49,6 +49,24 @@ class AvailabilityEngine
         // Busy-Zeiten aus allen Kalender-Quellen sammeln
         $allBusySlots = $this->collectBusySlots($dayStart, $dayEnd);
 
+        // Pausenzeit als Busy-Slot hinzufügen
+        $breakTime = $this->config['break_time'] ?? null;
+        if ($breakTime && !empty($breakTime['enabled'])) {
+            $breakStart = clone $date;
+            $breakStart->setTime(
+                (int)substr($breakTime['start'], 0, 2),
+                (int)substr($breakTime['start'], 3, 2),
+                0
+            );
+            $breakEnd = clone $date;
+            $breakEnd->setTime(
+                (int)substr($breakTime['end'], 0, 2),
+                (int)substr($breakTime['end'], 3, 2),
+                0
+            );
+            $allBusySlots[] = ['start' => $breakStart, 'end' => $breakEnd];
+        }
+
         // Busy-Zeiten zusammenführen und überlappende mergen
         $mergedBusy = $this->mergeBusySlots($allBusySlots);
 
