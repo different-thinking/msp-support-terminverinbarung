@@ -13,7 +13,7 @@ class MicrosoftCalendarService
     private const AUTH_URL = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize';
     private const TOKEN_URL = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token';
     private const GRAPH_URL = 'https://graph.microsoft.com/v1.0';
-    private const SCOPES = 'offline_access Calendars.ReadWrite OnlineMeetings.ReadWrite';
+    private const SCOPES = 'offline_access Calendars.ReadWrite OnlineMeetings.ReadWrite Mail.Send';
 
     public function __construct(array $sourceConfig, TokenStore $tokenStore)
     {
@@ -115,6 +115,10 @@ class MicrosoftCalendarService
 
     /**
      * Erstellt einen Termin mit optionalem Teams-Meeting.
+     *
+     * Die Einladung wird direkt über den M365-Account versendet –
+     * alle Attendees erhalten eine echte Outlook-Termineinladung,
+     * genau wie bei manueller Erstellung in Outlook/Teams.
      */
     public function createEvent(array $eventData, bool $withTeamsMeeting = false): ?array
     {
@@ -149,6 +153,11 @@ class MicrosoftCalendarService
                 'timeZone' => $eventData['timezone'] ?? 'Europe/Berlin',
             ],
             'attendees' => $attendees,
+            // Erinnerung 15 Min vorher
+            'isReminderOn' => true,
+            'reminderMinutesBeforeStart' => 15,
+            // Einladungen werden automatisch von Graph versendet
+            'responseRequested' => true,
         ];
 
         if ($withTeamsMeeting) {
@@ -163,6 +172,47 @@ class MicrosoftCalendarService
         $response = $this->graphPost($url, $body, $accessToken);
 
         return $response;
+    }
+
+    /**
+     * Sendet eine E-Mail über den M365-Account (Microsoft Graph sendMail).
+     * Kann für zusätzliche Benachrichtigungen genutzt werden.
+     */
+    public function sendMail(array $mailData): bool
+    {
+        $accessToken = $this->getValidAccessToken();
+        if (!$accessToken) {
+            return false;
+        }
+
+        $toRecipients = [];
+        foreach ($mailData['to'] as $recipient) {
+            $toRecipients[] = [
+                'emailAddress' => [
+                    'address' => $recipient['email'],
+                    'name' => $recipient['name'] ?? $recipient['email'],
+                ],
+            ];
+        }
+
+        $body = [
+            'message' => [
+                'subject' => $mailData['subject'],
+                'body' => [
+                    'contentType' => 'HTML',
+                    'content' => $mailData['body_html'],
+                ],
+                'toRecipients' => $toRecipients,
+            ],
+            'saveToSentItems' => true,
+        ];
+
+        $url = self::GRAPH_URL . '/me/sendMail';
+        $response = $this->graphPost($url, $body, $accessToken);
+
+        // sendMail gibt bei Erfolg 202 (Accepted) ohne Body zurück
+        // Bei Fehler enthält die Response einen error-Key
+        return !isset($response['error']);
     }
 
     private function getValidAccessToken(): ?string

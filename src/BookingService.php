@@ -4,12 +4,14 @@ require_once __DIR__ . '/TokenStore.php';
 require_once __DIR__ . '/MicrosoftCalendarService.php';
 require_once __DIR__ . '/GoogleCalendarService.php';
 require_once __DIR__ . '/AvailabilityEngine.php';
-require_once __DIR__ . '/ICSGenerator.php';
-require_once __DIR__ . '/Mailer.php';
 
 /**
  * Haupt-Service für die Terminbuchung.
- * Koordiniert Kalender-Services, Verfügbarkeit, Terminerstellung und E-Mail-Versand.
+ * Koordiniert Kalender-Services, Verfügbarkeit und Terminerstellung.
+ *
+ * Die Einladungen werden direkt über den konfigurierten M365-Account versendet –
+ * Microsoft Graph sendet beim Erstellen eines Events automatisch Outlook-Einladungen
+ * an alle Attendees. Kein separater SMTP-Versand nötig.
  */
 class BookingService
 {
@@ -17,15 +19,11 @@ class BookingService
     private TokenStore $tokenStore;
     private array $calendarServices = [];
     private AvailabilityEngine $availabilityEngine;
-    private ICSGenerator $icsGenerator;
-    private Mailer $mailer;
 
     public function __construct()
     {
         $this->config = require __DIR__ . '/../config.php';
         $this->tokenStore = new TokenStore($this->config['token_store']['path']);
-        $this->icsGenerator = new ICSGenerator();
-        $this->mailer = new Mailer($this->config['mail']);
 
         $this->initCalendarServices();
         $this->availabilityEngine = new AvailabilityEngine($this->config, $this->calendarServices);
@@ -129,69 +127,39 @@ class BookingService
         // Beschreibung erstellen
         $description = $this->buildDescription($bookingData);
 
-        // Termin im Kalender erstellen (mit Teams-Meeting)
+        // Termin über den M365-Account erstellen (mit Teams-Meeting).
+        // Graph API versendet dabei automatisch Outlook-Einladungen an alle
+        // Attendees – identisch zu manuell in Outlook erstellten Terminen.
         $event = null;
         $teamsLink = '';
         $bookingTarget = $this->getBookingTarget();
 
-        if ($bookingTarget && $bookingTarget instanceof MicrosoftCalendarService) {
-            $event = $bookingTarget->createEvent([
-                'subject' => $subject,
-                'description' => $description,
-                'start' => $start,
-                'end' => $end,
-                'timezone' => $this->config['app']['timezone'],
-                'attendees' => $attendees,
-            ], $this->config['teams']['enabled']);
-
-            if ($event && isset($event['onlineMeeting']['joinUrl'])) {
-                $teamsLink = $event['onlineMeeting']['joinUrl'];
-            }
+        if (!$bookingTarget || !($bookingTarget instanceof MicrosoftCalendarService)) {
+            return ['success' => false, 'message' => 'Kein M365-Kalender als Buchungsziel konfiguriert.'];
         }
 
-        // ICS-Einladung erstellen
-        $icsParams = [
+        $event = $bookingTarget->createEvent([
             'subject' => $subject,
+            'description' => $description,
             'start' => $start,
             'end' => $end,
-            'description' => strip_tags($description),
-            'location' => $teamsLink ? 'Microsoft Teams Meeting' : '',
-            'organizer' => $this->config['organizer'],
+            'timezone' => $this->config['app']['timezone'],
             'attendees' => $attendees,
-        ];
-        $icsContent = $this->icsGenerator->generate($icsParams);
+        ], $this->config['teams']['enabled']);
 
-        // E-Mail mit Einladung an den Buchenden senden
-        $emailBody = $this->buildEmailBody($bookingData, $start, $end, $teamsLink);
+        if (!$event || isset($event['error'])) {
+            $errorMsg = $event['error']['message'] ?? 'Unbekannter Fehler bei der Terminerstellung.';
+            error_log('Graph API Event creation failed: ' . $errorMsg);
+            return ['success' => false, 'message' => 'Der Termin konnte nicht erstellt werden. Bitte versuchen Sie es später erneut.'];
+        }
 
-        $mailSent = $this->mailer->sendInvitation([
-            'to' => [
-                'email' => $bookingData['email'],
-                'name' => $bookingData['firstname'] . ' ' . $bookingData['lastname'],
-            ],
-            'subject' => $subject,
-            'body_html' => $emailBody,
-            'ics' => $icsContent,
-        ]);
-
-        // Einladung auch an weitere Teilnehmer senden
-        if (!empty($bookingData['additional_attendees'])) {
-            foreach ($bookingData['additional_attendees'] as $attEmail) {
-                $attEmail = trim($attEmail);
-                if (filter_var($attEmail, FILTER_VALIDATE_EMAIL)) {
-                    $this->mailer->sendInvitation([
-                        'to' => ['email' => $attEmail, 'name' => $attEmail],
-                        'subject' => $subject,
-                        'body_html' => $emailBody,
-                        'ics' => $icsContent,
-                    ]);
-                }
-            }
+        if (isset($event['onlineMeeting']['joinUrl'])) {
+            $teamsLink = $event['onlineMeeting']['joinUrl'];
         }
 
         return [
             'success' => true,
-            'message' => 'Termin erfolgreich gebucht! Sie erhalten eine Einladung per E-Mail.',
+            'message' => 'Termin erfolgreich gebucht! Sie erhalten eine Einladung per E-Mail von ' . $this->config['organizer']['name'] . '.',
             'event' => [
                 'date' => $start->format('d.m.Y'),
                 'time' => $start->format('H:i') . ' – ' . $end->format('H:i'),
@@ -327,41 +295,4 @@ class BookingService
         return implode('<br>', $lines);
     }
 
-    private function buildEmailBody(array $data, \DateTime $start, \DateTime $end, string $teamsLink): string
-    {
-        $html = '<div style="font-family: Arial, sans-serif; max-width: 600px;">';
-        $html .= '<h2 style="color: #333;">Terminbestätigung</h2>';
-        $html .= '<p>Ihr Termin wurde erfolgreich gebucht.</p>';
-        $html .= '<table style="border-collapse: collapse; width: 100%; margin: 20px 0;">';
-        $html .= '<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Datum</td>';
-        $html .= '<td style="padding: 8px; border-bottom: 1px solid #eee;"><b>' . $start->format('d.m.Y') . '</b></td></tr>';
-        $html .= '<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Uhrzeit</td>';
-        $html .= '<td style="padding: 8px; border-bottom: 1px solid #eee;"><b>' . $start->format('H:i') . ' – ' . $end->format('H:i') . ' Uhr</b></td></tr>';
-        $html .= '<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Organisator</td>';
-        $html .= '<td style="padding: 8px; border-bottom: 1px solid #eee;">' . htmlspecialchars($this->config['organizer']['name']) . '</td></tr>';
-
-        if ($teamsLink) {
-            $html .= '<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Meeting</td>';
-            $html .= '<td style="padding: 8px; border-bottom: 1px solid #eee;">';
-            $html .= '<a href="' . htmlspecialchars($teamsLink) . '" style="color: #6264a7; text-decoration: none;">';
-            $html .= 'Microsoft Teams Meeting beitreten</a></td></tr>';
-        }
-
-        $html .= '</table>';
-
-        if (!empty($data['fields'])) {
-            foreach ($this->config['booking_form']['additional_fields'] as $field) {
-                if (!empty($data['fields'][$field['name']])) {
-                    $html .= '<p><b>' . htmlspecialchars($field['label']) . ':</b> '
-                        . htmlspecialchars($data['fields'][$field['name']]) . '</p>';
-                }
-            }
-        }
-
-        $html .= '<p style="color: #999; font-size: 12px; margin-top: 30px;">Diese Einladung wurde automatisch erstellt. '
-            . 'Im Anhang finden Sie die Kalenderdatei (.ics), die Sie in Ihren Kalender importieren können.</p>';
-        $html .= '</div>';
-
-        return $html;
-    }
 }

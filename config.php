@@ -99,19 +99,10 @@ return [
         'email' => 'max@example.com',
     ],
 
-    // E-Mail-Einstellungen
-    'mail' => [
-        'method' => 'smtp', // 'smtp' oder 'mail' (PHP mail())
-        'smtp' => [
-            'host' => 'smtp.example.com',
-            'port' => 587,
-            'encryption' => 'tls', // 'tls', 'ssl', oder ''
-            'username' => '',
-            'password' => '',
-        ],
-        'from_name' => 'Terminbuchung',
-        'from_email' => 'noreply@example.com',
-    ],
+    // E-Mail-Versand erfolgt direkt über den konfigurierten M365-Account.
+    // Beim Erstellen eines Termins über Microsoft Graph werden Einladungen
+    // automatisch als echte Outlook-Einladungen aus dem M365-Postfach versendet.
+    // → Kein separater SMTP-Server nötig.
 
     // Token-Speicher
     'token_store' => [

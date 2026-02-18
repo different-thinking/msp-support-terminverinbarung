@@ -149,7 +149,7 @@ $organizerName = $config['organizer']['name'];
         </div>
 
         <div class="alert alert-info">
-            Nach der Buchung erhalten Sie eine Termineinladung per E-Mail mit einem Microsoft Teams Link.
+            Nach der Buchung erhalten Sie eine Outlook-Termineinladung direkt von <?= htmlspecialchars($organizerName) ?> mit einem Microsoft Teams Link.
         </div>
 
         <div class="btn-group">
