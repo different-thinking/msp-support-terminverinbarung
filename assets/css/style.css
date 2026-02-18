@@ -209,10 +209,11 @@ body {
     display: flex;
     gap: 24px;
     align-items: flex-start;
+    justify-content: center;
 }
 
 .calendar-container {
-    flex: 1;
+    flex: 0 0 420px;
     max-width: 420px;
 }
 
