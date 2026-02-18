@@ -493,6 +493,51 @@
         }).catch(() => { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
     });
 
+    // ==================== Embed-Code Generator ====================
+    const embedWidth = document.getElementById('embed-width');
+    const embedHeight = document.getElementById('embed-height');
+    const embedCode = document.getElementById('embed-code');
+
+    function updateEmbedCode() {
+        if (!embedCode) return;
+        const w = (embedWidth ? embedWidth.value : '100%') || '100%';
+        const h = (embedHeight ? embedHeight.value : '700px') || '700px';
+        // URL aus dem Preview-iframe lesen oder aus dem sichtbaren Input
+        const iframe = document.getElementById('embed-preview-iframe');
+        const src = iframe ? iframe.src : '';
+        if (!src) {
+            embedCode.value = '<!-- Bitte zuerst die App-URL unter Allgemein konfigurieren -->';
+            return;
+        }
+        embedCode.value =
+            '<iframe src="' + src + '"\n' +
+            '        style="width:' + w + ';min-height:' + h + ';border:none;"\n' +
+            '        loading="lazy" allow="clipboard-write"></iframe>\n' +
+            '<script>\n' +
+            'window.addEventListener("message", function(e) {\n' +
+            '    if (e.data && e.data.type === "terminbuchung-resize") {\n' +
+            '        var f = document.querySelector(\'iframe[src*="embed.php"]\');\n' +
+            '        if (f) f.style.height = e.data.height + "px";\n' +
+            '    }\n' +
+            '});\n' +
+            '</' + 'script>';
+    }
+
+    if (embedWidth) embedWidth.addEventListener('input', updateEmbedCode);
+    if (embedHeight) embedHeight.addEventListener('input', updateEmbedCode);
+    updateEmbedCode();
+
+    const btnCopyEmbed = document.getElementById('btn-copy-embed');
+    if (btnCopyEmbed) {
+        btnCopyEmbed.addEventListener('click', function () {
+            if (embedCode) {
+                navigator.clipboard.writeText(embedCode.value).then(function () {
+                    showToast('Embed-Code kopiert');
+                });
+            }
+        });
+    }
+
     // ==================== ESC schließt Modals ====================
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeSourceModal();

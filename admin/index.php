@@ -111,6 +111,9 @@ foreach ($config['calendar_sources'] as $src) {
             <a href="#" class="nav-item" data-tab="teams">
                 <span class="nav-icon">&#128247;</span> Teams-Meeting
             </a>
+            <a href="#" class="nav-item" data-tab="embed">
+                <span class="nav-icon">&#128444;</span> Einbetten
+            </a>
             <a href="#" class="nav-item" data-tab="access">
                 <span class="nav-icon">&#128274;</span> Zugang
             </a>
@@ -583,6 +586,66 @@ foreach ($config['calendar_sources'] as $src) {
                     <button type="submit" class="btn btn-primary">Speichern</button>
                 </div>
             </form>
+        </section>
+
+        <!-- ==================== Tab: Einbetten ==================== -->
+        <section id="tab-embed" class="tab-content">
+            <div class="tab-header">
+                <h1>Einbetten</h1>
+                <p>Binden Sie den Buchungskalender in andere Webseiten ein</p>
+            </div>
+
+            <?php
+            $embedUrl = rtrim($config['app']['url'] ?: '', '/') . '/embed.php';
+            ?>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">iframe Embed-Code</h3>
+                <p class="text-muted" style="margin-bottom:16px;">
+                    Kopieren Sie diesen Code und fügen Sie ihn in Ihre Webseite ein.
+                    Der Kalender passt sich automatisch an die Breite des Containers an.
+                </p>
+
+                <?php if (empty($config['app']['url'])): ?>
+                <div class="alert alert-warning" style="margin-bottom:16px;">
+                    <strong>Hinweis:</strong> Sie haben noch keine App-URL konfiguriert.
+                    Bitte tragen Sie diese zuerst unter
+                    <a href="#" class="nav-link-inline" data-tab="general">Allgemein</a> ein.
+                </div>
+                <?php endif; ?>
+
+                <div class="form-group">
+                    <label for="embed-width">Breite</label>
+                    <input type="text" id="embed-width" value="100%" placeholder="z.B. 100% oder 600px" style="max-width:200px;">
+                </div>
+                <div class="form-group">
+                    <label for="embed-height">Mindesthöhe</label>
+                    <input type="text" id="embed-height" value="700px" placeholder="z.B. 700px" style="max-width:200px;">
+                </div>
+
+                <div class="form-group">
+                    <label>Embed-Code</label>
+                    <textarea id="embed-code" readonly rows="8" style="font-family:monospace;font-size:13px;background:var(--gray-50);"></textarea>
+                </div>
+
+                <div style="display:flex;gap:8px;">
+                    <button type="button" id="btn-copy-embed" class="btn btn-primary">Code kopieren</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">Vorschau</h3>
+                <div id="embed-preview" style="border:1px solid var(--gray-200);border-radius:var(--radius);overflow:hidden;margin-top:12px;">
+                    <?php if (!empty($config['app']['url'])): ?>
+                    <iframe src="<?= htmlspecialchars($embedUrl) ?>" id="embed-preview-iframe"
+                            style="width:100%;min-height:700px;border:none;"></iframe>
+                    <?php else: ?>
+                    <div style="padding:40px;text-align:center;color:var(--gray-400);">
+                        Vorschau verfügbar nach Konfiguration der App-URL
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </section>
 
         <!-- ==================== Tab: Zugang ==================== -->
