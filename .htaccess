@@ -1,0 +1,19 @@
+# Terminbuchungs-App – Apache Konfiguration
+
+# Zugriff auf sensible Verzeichnisse blockieren
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # /data/ nicht öffentlich zugänglich
+    RewriteRule ^data/ - [F,L]
+
+    # /src/ nicht öffentlich zugänglich
+    RewriteRule ^src/ - [F,L]
+
+    # config.php nicht direkt aufrufbar
+    RewriteRule ^config\.php$ - [F,L]
+</IfModule>
+
+# PHP-Fehler nicht im Browser anzeigen (Produktiv)
+php_flag display_errors off
+php_flag log_errors on

@@ -1,0 +1,18 @@
+# Token-Daten (OAuth-Secrets)
+data/tokens.json
+
+# Konfiguration mit echten Credentials
+# config.php  ← Einkommentieren wenn echte Credentials enthalten
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PHP
+vendor/
