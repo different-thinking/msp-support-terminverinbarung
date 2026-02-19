@@ -801,28 +801,34 @@ foreach ($config['calendar_sources'] as $src) {
 
                     <h3 class="card-section-title">Payload-Vorschau</h3>
                     <p class="text-muted" style="margin-bottom:12px;">Dieses JSON wird bei jeder Buchung an die Webhook-URL gesendet (POST)</p>
-                    <pre class="webhook-payload-preview"><code>{
-  "event": "booking.created",
-  "timestamp": "2024-01-15T10:00:00+00:00",
-  "data": {
-    "date": "2024-01-15",
-    "date_formatted": "15.01.2024",
-    "time_start": "10:00",
-    "time_end": "11:00",
-    "timezone": "Europe/Berlin",
-    "firstname": "Max",
-    "lastname": "Mustermann",
-    "email": "max@example.com",
-    "Firma": "Firma GmbH",
-    "Telefon": "+49 123 456",
-    "additional_attendees": [],
-    "teams_link": "https://teams.microsoft.com/...",
-    "organizer": {
-      "name": "<?= htmlspecialchars($config['organizer']['name'] ?? '') ?>",
-      "email": "<?= htmlspecialchars($config['organizer']['email'] ?? '') ?>"
-    }
-  }
-}</code></pre>
+                    <?php
+                    $previewData = [
+                        'date' => '2024-01-15',
+                        'date_formatted' => '15.01.2024',
+                        'time_start' => '10:00',
+                        'time_end' => '11:00',
+                        'timezone' => $config['app']['timezone'] ?? 'Europe/Berlin',
+                        'firstname' => 'Max',
+                        'lastname' => 'Mustermann',
+                        'email' => 'max@example.com',
+                    ];
+                    foreach ($config['booking_form']['additional_fields'] ?? [] as $f) {
+                        $previewData[$f['label'] ?? $f['name']] = 'Beispielwert';
+                    }
+                    $previewData['additional_attendees'] = [];
+                    $previewData['teams_link'] = 'https://teams.microsoft.com/...';
+                    $previewData['organizer'] = [
+                        'name' => $config['organizer']['name'] ?? '',
+                        'email' => $config['organizer']['email'] ?? '',
+                    ];
+                    $previewPayload = [
+                        'event' => 'booking.created',
+                        'timestamp' => '2024-01-15T10:00:00+00:00',
+                        'data' => $previewData,
+                    ];
+                    $previewJson = json_encode($previewPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    ?>
+                    <pre class="webhook-payload-preview"><code><?= htmlspecialchars($previewJson) ?></code></pre>
                 </div>
 
                 <div class="form-actions">
