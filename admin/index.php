@@ -813,16 +813,7 @@ foreach ($config['calendar_sources'] as $src) {
     "firstname": "Max",
     "lastname": "Mustermann",
     "email": "max@example.com",
-    "fields": { "company": "Firma GmbH" },
-    "custom_fields": [
-      {
-        "name": "company",
-        "label": "Firma",
-        "type": "text",
-        "required": false,
-        "value": "Firma GmbH"
-      }
-    ],
+    "fields": { "Firma": "Firma GmbH", "Telefon": "+49 123 456" },
     "additional_attendees": [],
     "teams_link": "https://teams.microsoft.com/...",
     "organizer": {

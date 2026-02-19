@@ -393,18 +393,15 @@ class BookingService
         \DateTime $end,
         string $teamsLink
     ): array {
-        // Custom Fields mit Label, Typ und Wert aufbereiten
-        $customFields = [];
+        // Custom Fields als Label:Wert aufbereiten
+        $fields = [];
         $rawFields = $bookingData['fields'] ?? [];
         foreach ($this->config['booking_form']['additional_fields'] ?? [] as $fieldDef) {
             $name = $fieldDef['name'] ?? '';
-            $customFields[] = [
-                'name' => $name,
-                'label' => $fieldDef['label'] ?? $name,
-                'type' => $fieldDef['type'] ?? 'text',
-                'required' => !empty($fieldDef['required']),
-                'value' => $rawFields[$name] ?? '',
-            ];
+            $label = $fieldDef['label'] ?? $name;
+            if (isset($rawFields[$name]) && $rawFields[$name] !== '') {
+                $fields[$label] = $rawFields[$name];
+            }
         }
 
         $payload = [
@@ -419,8 +416,7 @@ class BookingService
                 'firstname' => $bookingData['firstname'],
                 'lastname' => $bookingData['lastname'],
                 'email' => $bookingData['email'],
-                'fields' => $rawFields,
-                'custom_fields' => $customFields,
+                'fields' => $fields,
                 'additional_attendees' => $bookingData['additional_attendees'] ?? [],
                 'teams_link' => $teamsLink,
                 'organizer' => [
