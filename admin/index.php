@@ -813,7 +813,8 @@ foreach ($config['calendar_sources'] as $src) {
                         'email' => 'max@example.com',
                     ];
                     foreach ($config['booking_form']['additional_fields'] ?? [] as $f) {
-                        $previewData[$f['label'] ?? $f['name']] = 'Beispielwert';
+                        $label = $f['label'] ?? $f['name'];
+                        $previewData[$label] = !empty($f['placeholder']) ? $f['placeholder'] : $label;
                     }
                     $previewData['additional_attendees'] = [];
                     $previewData['teams_link'] = 'https://teams.microsoft.com/...';
