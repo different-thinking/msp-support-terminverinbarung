@@ -352,6 +352,76 @@ try {
             jsonResponse(['success' => true]);
             break;
 
+        // ==================== Webhook ====================
+        case 'save-webhook':
+            requirePost($method);
+            $input = getJsonInput();
+            $headers = [];
+            if (isset($input['headers']) && is_array($input['headers'])) {
+                foreach ($input['headers'] as $h) {
+                    $name = trim($h['name'] ?? '');
+                    $value = trim($h['value'] ?? '');
+                    if (!empty($name)) {
+                        $headers[] = ['name' => $name, 'value' => $value];
+                    }
+                }
+            }
+            $webhook = [
+                'enabled' => !empty($input['enabled']),
+                'url' => filter_var(trim($input['url'] ?? ''), FILTER_VALIDATE_URL) ? trim($input['url']) : '',
+                'secret' => trim($input['secret'] ?? ''),
+                'headers' => $headers,
+            ];
+            if ($webhook['enabled'] && empty($webhook['url'])) {
+                jsonResponse(['error' => 'Bitte geben Sie eine gültige Webhook-URL ein.'], 422);
+            }
+            $cm->saveSection('webhook', $webhook);
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'test-webhook':
+            requirePost($method);
+            $webhookConfig = $cm->getSection('webhook') ?: [];
+            if (empty($webhookConfig['url'])) {
+                jsonResponse(['error' => 'Keine Webhook-URL konfiguriert.'], 422);
+            }
+
+            require_once __DIR__ . '/../src/BookingService.php';
+            $svc = new BookingService();
+
+            $tz = new \DateTimeZone($svc->getConfig()['app']['timezone'] ?? 'Europe/Berlin');
+            $now = new \DateTime('now', $tz);
+            $end = clone $now;
+            $end->modify('+60 minutes');
+
+            $testBooking = [
+                'date' => $now->format('Y-m-d'),
+                'time' => $now->format('H:i'),
+                'firstname' => 'Test',
+                'lastname' => 'Webhook',
+                'email' => 'test@example.com',
+                'fields' => ['company' => 'Testfirma GmbH'],
+                'additional_attendees' => [],
+            ];
+
+            $payload = $svc->buildWebhookPayload($testBooking, $now, $end, 'https://teams.microsoft.com/test-meeting');
+            $payload['event'] = 'booking.test';
+
+            $result = $svc->sendWebhookRequest(
+                $webhookConfig['url'],
+                $payload,
+                $webhookConfig['secret'] ?? '',
+                $webhookConfig['headers'] ?? []
+            );
+
+            jsonResponse([
+                'success' => $result['success'],
+                'status_code' => $result['status_code'],
+                'response' => $result['response'],
+                'error' => $result['error'],
+            ]);
+            break;
+
         // ==================== Admin-Passwort ====================
         case 'save-password':
             requirePost($method);
