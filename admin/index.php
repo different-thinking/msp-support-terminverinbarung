@@ -47,14 +47,14 @@ if ($cm->hasAdminPassword()) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['new_password'])) {
         $newPw = $_POST['new_password'];
         $confirmPw = $_POST['confirm_password'] ?? '';
-        if ($newPw === $confirmPw && strlen($newPw) >= 6) {
+        if ($newPw === $confirmPw && strlen($newPw) >= 12) {
             $cm->setAdminPassword($newPw);
             session_regenerate_id(true);
             $_SESSION['admin_auth'] = true;
             $authenticated = true;
             $requireSetup = false;
         } else {
-            $authError = 'Passwoerter stimmen nicht ueberein oder sind zu kurz (min. 6 Zeichen).';
+            $authError = 'Passwoerter stimmen nicht ueberein oder sind zu kurz (min. 12 Zeichen).';
         }
     }
 }
@@ -107,12 +107,12 @@ foreach ($config['calendar_sources'] as $src) {
             <form method="POST">
                 <div class="form-group">
                     <label for="new_password">Neues Passwort</label>
-                    <input type="password" id="new_password" name="new_password" minlength="6" required autofocus>
-                    <div class="form-hint">Mindestens 6 Zeichen</div>
+                    <input type="password" id="new_password" name="new_password" minlength="12" required autofocus>
+                    <div class="form-hint">Mindestens 12 Zeichen</div>
                 </div>
                 <div class="form-group">
                     <label for="confirm_password">Passwort bestaetigen</label>
-                    <input type="password" id="confirm_password" name="confirm_password" minlength="6" required>
+                    <input type="password" id="confirm_password" name="confirm_password" minlength="12" required>
                 </div>
                 <button type="submit" class="btn btn-primary">Passwort setzen & anmelden</button>
             </form>

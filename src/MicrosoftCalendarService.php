@@ -22,6 +22,11 @@ class MicrosoftCalendarService
         $this->sourceId = $sourceConfig['id'];
     }
 
+    public function getSourceId(): string
+    {
+        return $this->sourceId;
+    }
+
     public function getAuthUrl(string $state = ''): string
     {
         $tenant = $this->sourceConfig['tenant_id'] ?: 'common';
