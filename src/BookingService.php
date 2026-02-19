@@ -393,26 +393,44 @@ class BookingService
         \DateTime $end,
         string $teamsLink
     ): array {
+        // Custom Fields als Label:Wert aufbereiten
+        $fields = [];
+        $rawFields = $bookingData['fields'] ?? [];
+        foreach ($this->config['booking_form']['additional_fields'] ?? [] as $fieldDef) {
+            $name = $fieldDef['name'] ?? '';
+            $label = $fieldDef['label'] ?? $name;
+            if (isset($rawFields[$name]) && $rawFields[$name] !== '') {
+                $fields[$label] = $rawFields[$name];
+            }
+        }
+
+        $data = [
+            'date' => $start->format('Y-m-d'),
+            'date_formatted' => $start->format('d.m.Y'),
+            'time_start' => $start->format('H:i'),
+            'time_end' => $end->format('H:i'),
+            'timezone' => $this->config['app']['timezone'],
+            'firstname' => $bookingData['firstname'],
+            'lastname' => $bookingData['lastname'],
+            'email' => $bookingData['email'],
+        ];
+
+        // Custom Fields flach auf gleicher Ebene einfügen
+        foreach ($fields as $label => $value) {
+            $data[$label] = $value;
+        }
+
+        $data['additional_attendees'] = $bookingData['additional_attendees'] ?? [];
+        $data['teams_link'] = $teamsLink;
+        $data['organizer'] = [
+            'name' => $this->config['organizer']['name'] ?? '',
+            'email' => $this->config['organizer']['email'] ?? '',
+        ];
+
         $payload = [
             'event' => 'booking.created',
             'timestamp' => (new \DateTime('now', new \DateTimeZone('UTC')))->format('c'),
-            'data' => [
-                'date' => $start->format('Y-m-d'),
-                'date_formatted' => $start->format('d.m.Y'),
-                'time_start' => $start->format('H:i'),
-                'time_end' => $end->format('H:i'),
-                'timezone' => $this->config['app']['timezone'],
-                'firstname' => $bookingData['firstname'],
-                'lastname' => $bookingData['lastname'],
-                'email' => $bookingData['email'],
-                'fields' => $bookingData['fields'] ?? [],
-                'additional_attendees' => $bookingData['additional_attendees'] ?? [],
-                'teams_link' => $teamsLink,
-                'organizer' => [
-                    'name' => $this->config['organizer']['name'] ?? '',
-                    'email' => $this->config['organizer']['email'] ?? '',
-                ],
-            ],
+            'data' => $data,
         ];
 
         return $payload;

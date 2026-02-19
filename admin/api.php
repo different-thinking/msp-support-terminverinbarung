@@ -394,13 +394,22 @@ try {
             $end = clone $now;
             $end->modify('+60 minutes');
 
+            // Testdaten für Custom Fields aus der aktuellen Formular-Konfiguration erzeugen
+            $testFields = [];
+            $bookingForm = $cm->getSection('booking_form') ?: [];
+            foreach ($bookingForm['additional_fields'] ?? [] as $fieldDef) {
+                $name = $fieldDef['name'] ?? '';
+                if (empty($name)) continue;
+                $testFields[$name] = 'Testwert für ' . ($fieldDef['label'] ?? $name);
+            }
+
             $testBooking = [
                 'date' => $now->format('Y-m-d'),
                 'time' => $now->format('H:i'),
                 'firstname' => 'Test',
                 'lastname' => 'Webhook',
                 'email' => 'test@example.com',
-                'fields' => ['company' => 'Testfirma GmbH'],
+                'fields' => $testFields,
                 'additional_attendees' => [],
             ];
 
