@@ -151,6 +151,9 @@ class BookingService
         // Informationsmail an Kalenderinhaber senden
         $this->sendOwnerNotification($bookingTarget, $bookingData, $start, $end, $teamsLink);
 
+        // Webhook auslösen
+        $this->fireWebhook($bookingData, $start, $end, $teamsLink);
+
         return [
             'success' => true,
             'message' => 'Termin erfolgreich gebucht! Sie erhalten eine Einladung per E-Mail von ' . $this->config['organizer']['name'] . '.',
@@ -379,6 +382,127 @@ class BookingService
         $html .= '</div>';
 
         return $html;
+    }
+
+    /**
+     * Baut das Webhook-Payload aus den Buchungsdaten.
+     */
+    public function buildWebhookPayload(
+        array $bookingData,
+        \DateTime $start,
+        \DateTime $end,
+        string $teamsLink
+    ): array {
+        $payload = [
+            'event' => 'booking.created',
+            'timestamp' => (new \DateTime('now', new \DateTimeZone('UTC')))->format('c'),
+            'data' => [
+                'date' => $start->format('Y-m-d'),
+                'date_formatted' => $start->format('d.m.Y'),
+                'time_start' => $start->format('H:i'),
+                'time_end' => $end->format('H:i'),
+                'timezone' => $this->config['app']['timezone'],
+                'firstname' => $bookingData['firstname'],
+                'lastname' => $bookingData['lastname'],
+                'email' => $bookingData['email'],
+                'fields' => $bookingData['fields'] ?? [],
+                'additional_attendees' => $bookingData['additional_attendees'] ?? [],
+                'teams_link' => $teamsLink,
+                'organizer' => [
+                    'name' => $this->config['organizer']['name'] ?? '',
+                    'email' => $this->config['organizer']['email'] ?? '',
+                ],
+            ],
+        ];
+
+        return $payload;
+    }
+
+    /**
+     * Sendet einen Webhook-Request.
+     * @return array ['success' => bool, 'status_code' => int, 'response' => string, 'error' => string]
+     */
+    public function sendWebhookRequest(string $url, array $payload, string $secret = '', array $customHeaders = []): array
+    {
+        $jsonBody = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $headers = [
+            'Content-Type: application/json',
+            'User-Agent: MSP-Terminbuchung-Webhook/1.0',
+        ];
+
+        if (!empty($secret)) {
+            $signature = hash_hmac('sha256', $jsonBody, $secret);
+            $headers[] = 'X-Webhook-Signature: sha256=' . $signature;
+        }
+
+        foreach ($customHeaders as $header) {
+            $name = trim($header['name'] ?? '');
+            $value = trim($header['value'] ?? '');
+            if (!empty($name) && !empty($value)) {
+                $headers[] = $name . ': ' . $value;
+            }
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $jsonBody,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+        ]);
+
+        $response = curl_exec($ch);
+        $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if (!empty($error)) {
+            return ['success' => false, 'status_code' => 0, 'response' => '', 'error' => $error];
+        }
+
+        return [
+            'success' => $statusCode >= 200 && $statusCode < 300,
+            'status_code' => $statusCode,
+            'response' => mb_substr($response, 0, 1000),
+            'error' => '',
+        ];
+    }
+
+    /**
+     * Feuert den konfigurierten Webhook nach einer erfolgreichen Buchung.
+     */
+    private function fireWebhook(
+        array $bookingData,
+        \DateTime $start,
+        \DateTime $end,
+        string $teamsLink
+    ): void {
+        $webhookConfig = $this->config['webhook'] ?? [];
+        if (empty($webhookConfig['enabled']) || empty($webhookConfig['url'])) {
+            return;
+        }
+
+        $payload = $this->buildWebhookPayload($bookingData, $start, $end, $teamsLink);
+
+        try {
+            $result = $this->sendWebhookRequest(
+                $webhookConfig['url'],
+                $payload,
+                $webhookConfig['secret'] ?? '',
+                $webhookConfig['headers'] ?? []
+            );
+
+            if (!$result['success']) {
+                error_log('Webhook failed: HTTP ' . $result['status_code'] . ' – ' . ($result['error'] ?: $result['response']));
+            }
+        } catch (\Exception $e) {
+            error_log('Webhook error: ' . $e->getMessage());
+        }
     }
 
     private function buildDescription(array $data): string

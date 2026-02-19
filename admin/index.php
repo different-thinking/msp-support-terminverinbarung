@@ -168,6 +168,9 @@ foreach ($config['calendar_sources'] as $src) {
             <a href="#" class="nav-item" data-tab="teams">
                 <span class="nav-icon">&#128247;</span> Teams-Meeting
             </a>
+            <a href="#" class="nav-item" data-tab="webhook">
+                <span class="nav-icon">&#128268;</span> Webhook
+            </a>
             <a href="#" class="nav-item" data-tab="embed">
                 <span class="nav-icon">&#128444;</span> Einbetten
             </a>
@@ -729,6 +732,111 @@ foreach ($config['calendar_sources'] as $src) {
                     <button type="submit" class="btn btn-primary">Speichern</button>
                 </div>
             </form>
+        </section>
+
+        <!-- ==================== Tab: Webhook ==================== -->
+        <section id="tab-webhook" class="tab-content">
+            <div class="tab-header">
+                <h1>Webhook</h1>
+                <p>Nach jeder Buchung einen HTTP-Request an einen externen Service senden</p>
+            </div>
+
+            <?php $webhookConfig = $config['webhook'] ?? ['enabled' => false, 'url' => '', 'secret' => '', 'headers' => []]; ?>
+
+            <form id="form-webhook" class="admin-card">
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="webhook-enabled"
+                               <?= !empty($webhookConfig['enabled']) ? 'checked' : '' ?>>
+                        <span>Webhook aktivieren</span>
+                    </label>
+                    <div class="form-hint">Bei jeder erfolgreichen Buchung wird ein POST-Request an die URL gesendet</div>
+                </div>
+
+                <div id="webhook-fields" style="<?= empty($webhookConfig['enabled']) ? 'opacity:0.5;pointer-events:none;' : '' ?>">
+                    <div class="form-group">
+                        <label for="webhook-url">Webhook-URL</label>
+                        <input type="url" id="webhook-url"
+                               value="<?= htmlspecialchars($webhookConfig['url'] ?? '') ?>"
+                               placeholder="https://example.com/api/webhook">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="webhook-secret">Secret (optional)</label>
+                        <input type="text" id="webhook-secret"
+                               value="<?= htmlspecialchars($webhookConfig['secret'] ?? '') ?>"
+                               placeholder="Geheimer Schlüssel für HMAC-SHA256-Signatur">
+                        <div class="form-hint">Wird als <code>X-Webhook-Signature: sha256=...</code> Header mitgesendet. Damit kann der Empfänger verifizieren, dass der Request von dieser App stammt.</div>
+                    </div>
+
+                    <hr class="form-divider">
+
+                    <h3 class="card-section-title">Zusätzliche HTTP-Header</h3>
+                    <p class="text-muted" style="margin-bottom:12px;">Optionale Header, die bei jedem Webhook-Request mitgesendet werden (z.B. Authorization-Token)</p>
+
+                    <div id="webhook-headers-list">
+                        <?php foreach ($webhookConfig['headers'] ?? [] as $i => $header): ?>
+                        <div class="webhook-header-row">
+                            <div class="form-row" style="flex:1;">
+                                <div class="form-group">
+                                    <input type="text" class="wh-name"
+                                           value="<?= htmlspecialchars($header['name'] ?? '') ?>"
+                                           placeholder="Header-Name (z.B. Authorization)">
+                                </div>
+                                <div class="form-group">
+                                    <input type="text" class="wh-value"
+                                           value="<?= htmlspecialchars($header['value'] ?? '') ?>"
+                                           placeholder="Wert (z.B. Bearer token123)">
+                                </div>
+                            </div>
+                            <button type="button" class="btn-remove-wh-header" title="Entfernen">&times;</button>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <button type="button" id="btn-add-wh-header" class="btn btn-secondary" style="margin-top:8px;">
+                        + Header hinzufügen
+                    </button>
+
+                    <hr class="form-divider">
+
+                    <h3 class="card-section-title">Payload-Vorschau</h3>
+                    <p class="text-muted" style="margin-bottom:12px;">Dieses JSON wird bei jeder Buchung an die Webhook-URL gesendet (POST)</p>
+                    <pre class="webhook-payload-preview"><code>{
+  "event": "booking.created",
+  "timestamp": "2024-01-15T10:00:00+00:00",
+  "data": {
+    "date": "2024-01-15",
+    "date_formatted": "15.01.2024",
+    "time_start": "10:00",
+    "time_end": "11:00",
+    "timezone": "Europe/Berlin",
+    "firstname": "Max",
+    "lastname": "Mustermann",
+    "email": "max@example.com",
+    "fields": { "company": "Firma GmbH" },
+    "additional_attendees": [],
+    "teams_link": "https://teams.microsoft.com/...",
+    "organizer": {
+      "name": "<?= htmlspecialchars($config['organizer']['name'] ?? '') ?>",
+      "email": "<?= htmlspecialchars($config['organizer']['email'] ?? '') ?>"
+    }
+  }
+}</code></pre>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" id="btn-test-webhook" class="btn btn-secondary"
+                            <?= empty($webhookConfig['url']) ? 'disabled' : '' ?>>
+                        Test senden
+                    </button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+
+            <div id="webhook-test-result" style="display:none;" class="admin-card">
+                <h3 class="card-section-title">Test-Ergebnis</h3>
+                <div id="webhook-test-content"></div>
+            </div>
         </section>
 
         <!-- ==================== Tab: Einbetten ==================== -->

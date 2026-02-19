@@ -626,6 +626,142 @@
         });
     }
 
+    // ==================== Form: Webhook ====================
+
+    // Toggle Webhook-Felder
+    var webhookEnabled = document.getElementById('webhook-enabled');
+    if (webhookEnabled) {
+        webhookEnabled.addEventListener('change', function () {
+            var fields = document.getElementById('webhook-fields');
+            if (this.checked) {
+                fields.style.opacity = '1';
+                fields.style.pointerEvents = 'auto';
+            } else {
+                fields.style.opacity = '0.5';
+                fields.style.pointerEvents = 'none';
+            }
+        });
+    }
+
+    // Header hinzufügen
+    var btnAddWhHeader = document.getElementById('btn-add-wh-header');
+    if (btnAddWhHeader) {
+        btnAddWhHeader.addEventListener('click', function () {
+            var list = document.getElementById('webhook-headers-list');
+            var row = document.createElement('div');
+            row.className = 'webhook-header-row';
+            row.innerHTML =
+                '<div class="form-row" style="flex:1;">' +
+                '    <div class="form-group">' +
+                '        <input type="text" class="wh-name" placeholder="Header-Name (z.B. Authorization)">' +
+                '    </div>' +
+                '    <div class="form-group">' +
+                '        <input type="text" class="wh-value" placeholder="Wert (z.B. Bearer token123)">' +
+                '    </div>' +
+                '</div>' +
+                '<button type="button" class="btn-remove-wh-header" title="Entfernen">&times;</button>';
+            list.appendChild(row);
+            bindRemoveWhHeaderButtons();
+        });
+    }
+
+    function bindRemoveWhHeaderButtons() {
+        document.querySelectorAll('.btn-remove-wh-header').forEach(function (btn) {
+            btn.onclick = function () {
+                this.closest('.webhook-header-row').remove();
+            };
+        });
+    }
+    bindRemoveWhHeaderButtons();
+
+    // Webhook speichern
+    var formWebhook = document.getElementById('form-webhook');
+    if (formWebhook) {
+        formWebhook.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+
+            var headers = [];
+            document.querySelectorAll('.webhook-header-row').forEach(function (row) {
+                var name = row.querySelector('.wh-name').value.trim();
+                var value = row.querySelector('.wh-value').value.trim();
+                if (name) {
+                    headers.push({ name: name, value: value });
+                }
+            });
+
+            var data = {
+                enabled: document.getElementById('webhook-enabled').checked,
+                url: document.getElementById('webhook-url').value,
+                secret: document.getElementById('webhook-secret').value,
+                headers: headers,
+            };
+
+            apiPost('save-webhook', data).then(function (res) {
+                setLoading(btn, false);
+                if (res.success) {
+                    showToast('Webhook-Einstellungen gespeichert');
+                    // Test-Button Status aktualisieren
+                    var testBtn = document.getElementById('btn-test-webhook');
+                    if (testBtn) {
+                        testBtn.disabled = !data.url;
+                    }
+                } else {
+                    showToast(res.error || 'Fehler', 'error');
+                }
+            }).catch(function () { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
+        });
+    }
+
+    // Webhook testen
+    var btnTestWebhook = document.getElementById('btn-test-webhook');
+    if (btnTestWebhook) {
+        btnTestWebhook.addEventListener('click', function () {
+            var btn = this;
+            var origText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Sende Test...';
+
+            apiPost('test-webhook', {}).then(function (res) {
+                btn.disabled = false;
+                btn.textContent = origText;
+
+                var resultBox = document.getElementById('webhook-test-result');
+                var content = document.getElementById('webhook-test-content');
+                resultBox.style.display = 'block';
+
+                var statusClass = res.success ? 'success' : 'error';
+                var statusText = res.success ? 'Erfolgreich' : 'Fehlgeschlagen';
+                var statusCode = res.status_code ? ' (HTTP ' + res.status_code + ')' : '';
+
+                var html = '<div class="webhook-test-status ' + statusClass + '">' + statusText + statusCode + '</div>';
+
+                if (res.error) {
+                    html += '<p style="color:var(--error);font-size:14px;margin-top:8px;">' +
+                        res.error.replace(/</g, '&lt;') + '</p>';
+                }
+
+                if (res.response) {
+                    html += '<div class="webhook-test-response">' +
+                        res.response.replace(/</g, '&lt;') + '</div>';
+                }
+
+                content.innerHTML = html;
+
+                if (res.success) {
+                    showToast('Webhook-Test erfolgreich');
+                } else {
+                    showToast('Webhook-Test fehlgeschlagen', 'error');
+                }
+            }).catch(function () {
+                btn.disabled = false;
+                btn.textContent = origText;
+                showToast('Verbindungsfehler', 'error');
+            });
+        });
+    }
+
     // ==================== ESC schließt Modals ====================
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeSourceModal();

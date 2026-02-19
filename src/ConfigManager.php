@@ -194,6 +194,12 @@ class ConfigManager
                 'welcome_text' => '',
                 'booking_info' => '',
             ],
+            'webhook' => [
+                'enabled' => false,
+                'url' => '',
+                'secret' => '',
+                'headers' => [],
+            ],
             'admin' => [
                 'password_hash' => '',
             ],

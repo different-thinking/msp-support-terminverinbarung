@@ -805,6 +805,88 @@
     }
 }
 
+/* ==================== Webhook ==================== */
+
+.webhook-header-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.webhook-header-row .form-row {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.btn-remove-wh-header {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.15s;
+}
+
+.btn-remove-wh-header:hover {
+    background: var(--error-light);
+    color: var(--error);
+}
+
+.webhook-payload-preview {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-x: auto;
+    color: var(--gray-700);
+    margin: 0;
+}
+
+.webhook-payload-preview code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+.webhook-test-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.webhook-test-status.success {
+    background: var(--success-light);
+    color: var(--success);
+}
+
+.webhook-test-status.error {
+    background: var(--error-light);
+    color: var(--error);
+}
+
+.webhook-test-response {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 12px;
+    font-size: 13px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    color: var(--gray-600);
+    margin-top: 8px;
+}
+
 /* ==================== Image Upload (Seitendesign) ==================== */
 
 .image-upload-area {
