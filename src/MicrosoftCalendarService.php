@@ -1,10 +1,12 @@
 <?php
 
+require_once __DIR__ . '/CalendarServiceInterface.php';
+
 /**
  * Microsoft 365 Kalender-Service über Microsoft Graph API.
  * Handles OAuth2, Free/Busy-Abfragen, Terminerstellung und Teams-Meetings.
  */
-class MicrosoftCalendarService
+class MicrosoftCalendarService implements CalendarServiceInterface
 {
     private array $sourceConfig;
     private TokenStore $tokenStore;
@@ -15,6 +17,13 @@ class MicrosoftCalendarService
     private const TOKEN_URL = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token';
     private const GRAPH_URL = 'https://graph.microsoft.com/v1.0';
     private const SCOPES = 'offline_access Calendars.ReadWrite OnlineMeetings.ReadWrite Mail.Send';
+
+    /** Token-Erneuerung N Sekunden vor Ablauf */
+    private const TOKEN_REFRESH_BUFFER_SECONDS = 300;
+    /** Max. Kalender-Events pro Abfrage */
+    private const MAX_CALENDAR_EVENTS = 500;
+    /** HTTP-Timeout fuer API-Calls in Sekunden */
+    private const HTTP_TIMEOUT_SECONDS = 30;
 
     public function __construct(array $sourceConfig, TokenStore $tokenStore, string $timezone = 'Europe/Berlin')
     {
@@ -118,7 +127,7 @@ class MicrosoftCalendarService
                     'startDateTime' => $start->format('Y-m-d\TH:i:s'),
                     'endDateTime' => $end->format('Y-m-d\TH:i:s'),
                     '$select' => 'start,end,showAs',
-                    '$top' => 500,
+                    '$top' => self::MAX_CALENDAR_EVENTS,
                 ]);
 
             $ch = curl_init($url);
@@ -129,7 +138,7 @@ class MicrosoftCalendarService
                     'Content-Type: application/json',
                     'Prefer: outlook.timezone="' . $this->timezone . '"',
                 ],
-                CURLOPT_TIMEOUT => 30,
+                CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
             ]);
 
             $handles[] = ['handle' => $ch];
@@ -271,7 +280,7 @@ class MicrosoftCalendarService
         }
 
         // Token noch gültig (mit 5 Min Puffer)
-        if (($tokenData['expires_at'] ?? 0) > time() + 300) {
+        if (($tokenData['expires_at'] ?? 0) > time() + self::TOKEN_REFRESH_BUFFER_SECONDS) {
             return $tokenData['access_token'];
         }
 
@@ -328,12 +337,12 @@ class MicrosoftCalendarService
                 'Content-Type: application/json',
                 'Prefer: outlook.timezone="' . $this->timezone . '"',
             ],
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
         ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
-            error_log('Microsoft Graph GET error: ' . curl_error($ch));
+            SecurityHelper::logError('Graph API', 'GET error: ' . curl_error($ch));
             curl_close($ch);
             return ['error' => ['message' => 'Netzwerkfehler bei Graph-API-Abfrage']];
         }
@@ -342,7 +351,7 @@ class MicrosoftCalendarService
 
         $decoded = json_decode($response, true) ?: [];
         if ($httpCode >= 400) {
-            error_log("Microsoft Graph GET HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+            SecurityHelper::logError('Graph API', "GET HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
         }
         return $decoded;
     }
@@ -358,12 +367,12 @@ class MicrosoftCalendarService
                 'Authorization: Bearer ' . $accessToken,
                 'Content-Type: application/json',
             ],
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
         ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
-            error_log('Microsoft Graph POST error: ' . curl_error($ch));
+            SecurityHelper::logError('Graph API', 'POST error: ' . curl_error($ch));
             curl_close($ch);
             return ['error' => ['message' => 'Netzwerkfehler bei Graph-API-Anfrage']];
         }
@@ -377,7 +386,7 @@ class MicrosoftCalendarService
 
         $decoded = json_decode($response, true) ?: [];
         if ($httpCode >= 400) {
-            error_log("Microsoft Graph POST HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+            SecurityHelper::logError('Graph API', "POST HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
         }
         return $decoded;
     }
@@ -392,12 +401,12 @@ class MicrosoftCalendarService
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/x-www-form-urlencoded',
             ],
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
         ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
-            error_log('Microsoft token endpoint error: ' . curl_error($ch));
+            SecurityHelper::logError('MS Token', 'Token endpoint error: ' . curl_error($ch));
             curl_close($ch);
             return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
         }

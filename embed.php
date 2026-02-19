@@ -5,6 +5,8 @@
  */
 require_once __DIR__ . '/src/SecurityHelper.php';
 SecurityHelper::sendSecurityHeaders(allowFrame: true);
+// CSP: Erlaubt iframe-Einbettung von beliebigen Domains (oeffentliches Widget)
+header("Content-Security-Policy: frame-ancestors *");
 
 $config = require __DIR__ . '/config.php';
 

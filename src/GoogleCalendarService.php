@@ -1,10 +1,12 @@
 <?php
 
+require_once __DIR__ . '/CalendarServiceInterface.php';
+
 /**
  * Google Calendar Service über Google Calendar API v3.
  * Handles OAuth2 und Free/Busy-Abfragen.
  */
-class GoogleCalendarService
+class GoogleCalendarService implements CalendarServiceInterface
 {
     private array $sourceConfig;
     private TokenStore $tokenStore;
@@ -15,6 +17,11 @@ class GoogleCalendarService
     private const TOKEN_URL = 'https://oauth2.googleapis.com/token';
     private const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
     private const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+
+    /** Token-Erneuerung N Sekunden vor Ablauf */
+    private const TOKEN_REFRESH_BUFFER_SECONDS = 300;
+    /** HTTP-Timeout fuer API-Calls in Sekunden */
+    private const HTTP_TIMEOUT_SECONDS = 30;
 
     public function __construct(array $sourceConfig, TokenStore $tokenStore, string $timezone = 'Europe/Berlin')
     {
@@ -122,7 +129,7 @@ class GoogleCalendarService
                 'Authorization: Bearer ' . $accessToken,
                 'Content-Type: application/json',
             ],
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
         ]);
 
         return [['handle' => $ch]];
@@ -159,7 +166,7 @@ class GoogleCalendarService
             return null;
         }
 
-        if (($tokenData['expires_at'] ?? 0) > time() + 300) {
+        if (($tokenData['expires_at'] ?? 0) > time() + self::TOKEN_REFRESH_BUFFER_SECONDS) {
             return $tokenData['access_token'];
         }
 
@@ -212,12 +219,12 @@ class GoogleCalendarService
                 'Authorization: Bearer ' . $accessToken,
                 'Content-Type: application/json',
             ],
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
         ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
-            error_log('Google Calendar API error: ' . curl_error($ch));
+            SecurityHelper::logError('Google API', 'API error: ' . curl_error($ch));
             curl_close($ch);
             return ['error' => ['message' => 'Netzwerkfehler bei Google-API-Anfrage']];
         }
@@ -226,7 +233,7 @@ class GoogleCalendarService
 
         $decoded = json_decode($response, true) ?: [];
         if ($httpCode >= 400) {
-            error_log("Google Calendar API HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+            SecurityHelper::logError('Google API', "HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
         }
         return $decoded;
     }
@@ -241,12 +248,12 @@ class GoogleCalendarService
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/x-www-form-urlencoded',
             ],
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => self::HTTP_TIMEOUT_SECONDS,
         ]);
 
         $response = curl_exec($ch);
         if ($response === false) {
-            error_log('Google token endpoint error: ' . curl_error($ch));
+            SecurityHelper::logError('Google Token', 'Token endpoint error: ' . curl_error($ch));
             curl_close($ch);
             return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
         }

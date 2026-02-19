@@ -37,23 +37,109 @@ class ConfigManager
     }
 
     /**
-     * Speichert einen Konfigurations-Abschnitt.
+     * Speichert einen Konfigurations-Abschnitt (mit Typ-Validierung).
+     *
+     * @throws \InvalidArgumentException bei ungueltigem Typ oder Wert
      */
     public function saveSection(string $key, mixed $value): void
     {
+        $this->validateSection($key, $value);
         $this->config[$key] = $value;
         $this->save();
     }
 
     /**
-     * Speichert mehrere Abschnitte gleichzeitig.
+     * Speichert mehrere Abschnitte gleichzeitig (mit Typ-Validierung).
+     *
+     * @throws \InvalidArgumentException bei ungueltigem Typ oder Wert
      */
     public function saveSections(array $sections): void
     {
         foreach ($sections as $key => $value) {
+            $this->validateSection($key, $value);
             $this->config[$key] = $value;
         }
         $this->save();
+    }
+
+    /**
+     * Validiert einen Config-Abschnitt (Typ und Wertebereiche).
+     *
+     * @throws \InvalidArgumentException bei Validierungsfehler
+     */
+    private function validateSection(string $key, mixed $value): void
+    {
+        switch ($key) {
+            case 'app':
+                if (!is_array($value)) {
+                    throw new \InvalidArgumentException("Config 'app' muss ein Array sein");
+                }
+                if (isset($value['timezone']) && !in_array($value['timezone'], \DateTimeZone::listIdentifiers())) {
+                    throw new \InvalidArgumentException("Ungueltige Zeitzone: {$value['timezone']}");
+                }
+                if (isset($value['appointment_duration_minutes']) && (!is_int($value['appointment_duration_minutes']) || $value['appointment_duration_minutes'] < 5)) {
+                    throw new \InvalidArgumentException('Termindauer muss mindestens 5 Minuten betragen');
+                }
+                if (isset($value['slot_interval_minutes']) && (!is_int($value['slot_interval_minutes']) || $value['slot_interval_minutes'] < 5)) {
+                    throw new \InvalidArgumentException('Slot-Intervall muss mindestens 5 Minuten betragen');
+                }
+                if (isset($value['booking_horizon_days']) && (!is_int($value['booking_horizon_days']) || $value['booking_horizon_days'] < 1)) {
+                    throw new \InvalidArgumentException('Buchungshorizont muss mindestens 1 Tag sein');
+                }
+                break;
+
+            case 'working_hours':
+                if (!is_array($value)) {
+                    throw new \InvalidArgumentException("Config 'working_hours' muss ein Array sein");
+                }
+                $validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                foreach ($value as $day => $hours) {
+                    if (!in_array($day, $validDays)) {
+                        throw new \InvalidArgumentException("Ungueltiger Wochentag: {$day}");
+                    }
+                    if ($hours !== null && (!is_array($hours) || !isset($hours['start'], $hours['end']))) {
+                        throw new \InvalidArgumentException("Arbeitszeiten fuer {$day} muessen 'start' und 'end' enthalten");
+                    }
+                }
+                break;
+
+            case 'organizer':
+                if (!is_array($value)) {
+                    throw new \InvalidArgumentException("Config 'organizer' muss ein Array sein");
+                }
+                if (isset($value['email']) && !empty($value['email']) && !filter_var($value['email'], FILTER_VALIDATE_EMAIL)) {
+                    throw new \InvalidArgumentException('Ungueltige Organisator-E-Mail-Adresse');
+                }
+                break;
+
+            case 'calendar_sources':
+                if (!is_array($value)) {
+                    throw new \InvalidArgumentException("Config 'calendar_sources' muss ein Array sein");
+                }
+                foreach ($value as $source) {
+                    if (!is_array($source) || empty($source['id']) || empty($source['type'])) {
+                        throw new \InvalidArgumentException('Kalender-Quellen benoetigen mindestens id und type');
+                    }
+                    if (!in_array($source['type'], ['microsoft', 'google'])) {
+                        throw new \InvalidArgumentException("Ungueltiger Kalender-Typ: {$source['type']}");
+                    }
+                }
+                break;
+
+            case 'booking_form':
+                if (!is_array($value)) {
+                    throw new \InvalidArgumentException("Config 'booking_form' muss ein Array sein");
+                }
+                if (isset($value['max_additional_attendees']) && (!is_int($value['max_additional_attendees']) || $value['max_additional_attendees'] < 0)) {
+                    throw new \InvalidArgumentException('Max-Teilnehmer muss >= 0 sein');
+                }
+                break;
+
+            // break_time, teams, page_design, admin – nur Typ-Check
+            default:
+                // Kein spezifischer Validator – nur generelle Typpruefung
+                break;
+        }
     }
 
     /**
