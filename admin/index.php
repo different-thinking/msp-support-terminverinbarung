@@ -925,8 +925,8 @@ foreach ($config['calendar_sources'] as $src) {
                 <div class="form-row">
                     <div class="form-group">
                         <label for="new-password">Neues Passwort</label>
-                        <input type="password" id="new-password" minlength="6" required>
-                        <div class="form-hint">Mindestens 6 Zeichen</div>
+                        <input type="password" id="new-password" minlength="12" required>
+                        <div class="form-hint">Mindestens 12 Zeichen</div>
                     </div>
                     <div class="form-group">
                         <label for="confirm-password">Passwort bestätigen</label>

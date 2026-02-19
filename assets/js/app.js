@@ -20,6 +20,7 @@
         availableSlots: [],
         attendees: [],
         loading: false,
+        loadError: false,
         currentStep: 1,
     };
 
@@ -120,6 +121,7 @@
         if (daysCache[cacheKey]) {
             state.availableDays = daysCache[cacheKey];
             state.loading = false;
+            state.loadError = false;
             renderCalendar();
             updatePrevButton(year, month);
             prefetchNextMonth(year, month);
@@ -127,21 +129,27 @@
         }
 
         state.loading = true;
+        state.loadError = false;
         renderCalendar();
 
         fetch(`api/slots.php?action=days&year=${year}&month=${month}`)
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 const days = data.days || {};
                 daysCache[cacheKey] = days;
                 state.availableDays = days;
                 state.loading = false;
+                state.loadError = false;
                 renderCalendar();
                 updatePrevButton(year, month);
                 prefetchNextMonth(year, month);
             })
             .catch(() => {
                 state.loading = false;
+                state.loadError = true;
                 state.availableDays = {};
                 renderCalendar();
             });
@@ -165,11 +173,17 @@
         if (daysCache[nextKey]) return;
 
         fetch(`api/slots.php?action=days&year=${nextYear}&month=${nextMonth}`)
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 daysCache[nextKey] = data.days || {};
             })
-            .catch(() => {}); // Stilles Fehlschlagen beim Prefetch
+            .catch(() => {
+                // Prefetch fehlgeschlagen – Cache-Key wird nicht gesetzt,
+                // sodass bei Navigation erneut geladen wird
+            });
     }
 
     function renderCalendar() {
@@ -181,6 +195,20 @@
 
         if (state.loading) {
             grid.innerHTML = '<div class="calendar-loading"><div class="spinner spinner-dark"></div></div>';
+            return;
+        }
+
+        if (state.loadError) {
+            grid.innerHTML = '<div class="calendar-loading">'
+                + '<p style="color:var(--gray-500);margin-bottom:8px;">Laden fehlgeschlagen</p>'
+                + '<button type="button" class="btn btn-secondary btn-sm" id="btn-retry-load">Erneut versuchen</button>'
+                + '</div>';
+            const retryBtn = grid.querySelector('#btn-retry-load');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', function() {
+                    loadAvailableDays(state.currentYear, state.currentMonth + 1);
+                });
+            }
             return;
         }
 

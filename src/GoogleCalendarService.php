@@ -9,17 +9,19 @@ class GoogleCalendarService
     private array $sourceConfig;
     private TokenStore $tokenStore;
     private string $sourceId;
+    private string $timezone;
 
     private const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
     private const TOKEN_URL = 'https://oauth2.googleapis.com/token';
     private const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
     private const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
 
-    public function __construct(array $sourceConfig, TokenStore $tokenStore)
+    public function __construct(array $sourceConfig, TokenStore $tokenStore, string $timezone = 'Europe/Berlin')
     {
         $this->sourceConfig = $sourceConfig;
         $this->tokenStore = $tokenStore;
         $this->sourceId = $sourceConfig['id'];
+        $this->timezone = $timezone;
     }
 
     public function getSourceId(): string
@@ -107,7 +109,7 @@ class GoogleCalendarService
         $body = [
             'timeMin' => $start->format(\DateTime::ATOM),
             'timeMax' => $end->format(\DateTime::ATOM),
-            'timeZone' => 'Europe/Berlin',
+            'timeZone' => $this->timezone,
             'items' => $calendarIds,
         ];
 
@@ -214,9 +216,19 @@ class GoogleCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Google Calendar API error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => ['message' => 'Netzwerkfehler bei Google-API-Anfrage']];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        return json_decode($response, true) ?: [];
+        $decoded = json_decode($response, true) ?: [];
+        if ($httpCode >= 400) {
+            error_log("Google Calendar API HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+        }
+        return $decoded;
     }
 
     private function httpPost(string $url, array $data): array
@@ -233,6 +245,12 @@ class GoogleCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Google token endpoint error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         return json_decode($response, true) ?: [];
