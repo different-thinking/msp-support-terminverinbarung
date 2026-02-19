@@ -9,17 +9,19 @@ class MicrosoftCalendarService
     private array $sourceConfig;
     private TokenStore $tokenStore;
     private string $sourceId;
+    private string $timezone;
 
     private const AUTH_URL = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize';
     private const TOKEN_URL = 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token';
     private const GRAPH_URL = 'https://graph.microsoft.com/v1.0';
     private const SCOPES = 'offline_access Calendars.ReadWrite OnlineMeetings.ReadWrite Mail.Send';
 
-    public function __construct(array $sourceConfig, TokenStore $tokenStore)
+    public function __construct(array $sourceConfig, TokenStore $tokenStore, string $timezone = 'Europe/Berlin')
     {
         $this->sourceConfig = $sourceConfig;
         $this->tokenStore = $tokenStore;
         $this->sourceId = $sourceConfig['id'];
+        $this->timezone = $timezone;
     }
 
     public function getSourceId(): string
@@ -125,7 +127,7 @@ class MicrosoftCalendarService
                 CURLOPT_HTTPHEADER => [
                     'Authorization: Bearer ' . $accessToken,
                     'Content-Type: application/json',
-                    'Prefer: outlook.timezone="Europe/Berlin"',
+                    'Prefer: outlook.timezone="' . $this->timezone . '"',
                 ],
                 CURLOPT_TIMEOUT => 30,
             ]);
@@ -192,11 +194,11 @@ class MicrosoftCalendarService
             ],
             'start' => [
                 'dateTime' => $eventData['start']->format('Y-m-d\TH:i:s'),
-                'timeZone' => $eventData['timezone'] ?? 'Europe/Berlin',
+                'timeZone' => $eventData['timezone'] ?? $this->timezone,
             ],
             'end' => [
                 'dateTime' => $eventData['end']->format('Y-m-d\TH:i:s'),
-                'timeZone' => $eventData['timezone'] ?? 'Europe/Berlin',
+                'timeZone' => $eventData['timezone'] ?? $this->timezone,
             ],
             'attendees' => $attendees,
             // Erinnerung 15 Min vorher
@@ -324,7 +326,7 @@ class MicrosoftCalendarService
             CURLOPT_HTTPHEADER => [
                 'Authorization: Bearer ' . $accessToken,
                 'Content-Type: application/json',
-                'Prefer: outlook.timezone="Europe/Berlin"',
+                'Prefer: outlook.timezone="' . $this->timezone . '"',
             ],
             CURLOPT_TIMEOUT => 30,
         ]);

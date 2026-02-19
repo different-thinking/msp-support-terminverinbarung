@@ -10,7 +10,12 @@ require_once __DIR__ . '/../src/SecurityHelper.php';
 
 SecurityHelper::sendSecurityHeaders();
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-cache, no-store');
+
+// Nur GET-Requests erlaubt
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    header('Cache-Control: no-store');
+    jsonResponse(['error' => 'Nur GET-Anfragen erlaubt'], 405);
+}
 
 require_once __DIR__ . '/../src/BookingService.php';
 
@@ -28,6 +33,8 @@ try {
             }
 
             $days = $service->getAvailableDays($year, $month);
+            // Monats-Uebersicht kann 60 Sekunden gecacht werden (private = nur Browser, kein CDN)
+            header('Cache-Control: private, max-age=60');
             jsonResponse(['days' => $days]);
             break;
 
@@ -38,6 +45,8 @@ try {
             }
 
             $slots = $service->getAvailableSlots($date);
+            // Tages-Slots kuerzer cachen – Verfuegbarkeit aendert sich schneller
+            header('Cache-Control: private, max-age=30');
             jsonResponse(['slots' => $slots]);
             break;
 

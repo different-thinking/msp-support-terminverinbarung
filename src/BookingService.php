@@ -17,16 +17,13 @@ class BookingService
 {
     private array $config;
     private TokenStore $tokenStore;
-    private array $calendarServices = [];
-    private AvailabilityEngine $availabilityEngine;
+    private ?array $calendarServices = null;
+    private ?AvailabilityEngine $availabilityEngine = null;
 
     public function __construct()
     {
         $this->config = require __DIR__ . '/../config.php';
         $this->tokenStore = new TokenStore($this->config['token_store']['path']);
-
-        $this->initCalendarServices();
-        $this->availabilityEngine = new AvailabilityEngine($this->config, $this->calendarServices);
     }
 
     public function getConfig(): array
@@ -44,7 +41,7 @@ class BookingService
      */
     public function getAvailableDays(int $year, int $month): array
     {
-        return $this->availabilityEngine->getAvailableDays($year, $month);
+        return $this->getAvailabilityEngine()->getAvailableDays($year, $month);
     }
 
     /**
@@ -54,7 +51,7 @@ class BookingService
     {
         $tz = new \DateTimeZone($this->config['app']['timezone']);
         $dateObj = new \DateTime($date, $tz);
-        $slots = $this->availabilityEngine->getAvailableSlots($dateObj);
+        $slots = $this->getAvailabilityEngine()->getAvailableSlots($dateObj);
 
         return array_map(function ($slot) {
             return [
@@ -83,7 +80,7 @@ class BookingService
         $end->modify('+' . $this->config['app']['appointment_duration_minutes'] . ' minutes');
 
         // Pruefen ob Slot noch verfuegbar (gezielter Check nur fuer diesen Zeitraum)
-        if (!$this->availabilityEngine->isSlotAvailable($start, $end)) {
+        if (!$this->getAvailabilityEngine()->isSlotAvailable($start, $end)) {
             return ['success' => false, 'message' => 'Dieser Zeitslot ist leider nicht mehr verfügbar.'];
         }
 
@@ -170,7 +167,7 @@ class BookingService
         foreach ($this->config['calendar_sources'] as $source) {
             if (!empty($source['is_booking_target'])) {
                 $id = $source['id'];
-                foreach ($this->calendarServices as $service) {
+                foreach ($this->getCalendarServices() as $service) {
                     if ($this->getServiceId($service) === $id) {
                         return $service;
                     }
@@ -185,32 +182,59 @@ class BookingService
      */
     public function getCalendarServiceBySourceId(string $sourceId): ?object
     {
+        $timezone = $this->config['app']['timezone'] ?? 'Europe/Berlin';
+
         foreach ($this->config['calendar_sources'] as $source) {
             if ($source['id'] === $sourceId) {
                 if ($source['type'] === 'microsoft') {
-                    return new MicrosoftCalendarService($source, $this->tokenStore);
+                    return new MicrosoftCalendarService($source, $this->tokenStore, $timezone);
                 } elseif ($source['type'] === 'google') {
-                    return new GoogleCalendarService($source, $this->tokenStore);
+                    return new GoogleCalendarService($source, $this->tokenStore, $timezone);
                 }
             }
         }
         return null;
     }
 
+    /**
+     * Gibt die Calendar-Services zurueck (Lazy-Init: erst bei Bedarf erstellt).
+     */
+    private function getCalendarServices(): array
+    {
+        if ($this->calendarServices === null) {
+            $this->initCalendarServices();
+        }
+        return $this->calendarServices;
+    }
+
+    /**
+     * Gibt die AvailabilityEngine zurueck (Lazy-Init: erst bei Bedarf erstellt).
+     */
+    private function getAvailabilityEngine(): AvailabilityEngine
+    {
+        if ($this->availabilityEngine === null) {
+            $this->availabilityEngine = new AvailabilityEngine($this->config, $this->getCalendarServices());
+        }
+        return $this->availabilityEngine;
+    }
+
     private function initCalendarServices(): void
     {
+        $this->calendarServices = [];
+        $timezone = $this->config['app']['timezone'] ?? 'Europe/Berlin';
+
         foreach ($this->config['calendar_sources'] as $source) {
             if (empty($source['client_id'])) {
                 continue; // Nicht konfiguriert
             }
 
             if ($source['type'] === 'microsoft') {
-                $service = new MicrosoftCalendarService($source, $this->tokenStore);
+                $service = new MicrosoftCalendarService($source, $this->tokenStore, $timezone);
                 if ($service->isAuthenticated()) {
                     $this->calendarServices[] = $service;
                 }
             } elseif ($source['type'] === 'google') {
-                $service = new GoogleCalendarService($source, $this->tokenStore);
+                $service = new GoogleCalendarService($source, $this->tokenStore, $timezone);
                 if ($service->isAuthenticated()) {
                     $this->calendarServices[] = $service;
                 }
