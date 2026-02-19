@@ -3,6 +3,9 @@
  * Terminbuchung – Embed-Version für iframes
  * Optimiert für die Einbettung in externe Webseiten.
  */
+require_once __DIR__ . '/src/SecurityHelper.php';
+SecurityHelper::sendSecurityHeaders(allowFrame: true);
+
 $config = require __DIR__ . '/config.php';
 $appName = $config['app']['name'];
 $duration = $config['app']['appointment_duration_minutes'];

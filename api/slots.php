@@ -6,6 +6,9 @@
  * GET ?action=slots&date=2024-01-15   → Verfügbare Slots an einem Tag
  */
 
+require_once __DIR__ . '/../src/SecurityHelper.php';
+
+SecurityHelper::sendSecurityHeaders();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache, no-store');
 

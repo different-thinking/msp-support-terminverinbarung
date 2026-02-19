@@ -2,6 +2,9 @@
 /**
  * Terminbuchung – Hauptseite
  */
+require_once __DIR__ . '/src/SecurityHelper.php';
+SecurityHelper::sendSecurityHeaders();
+
 $config = require __DIR__ . '/config.php';
 
 /** Wandelt **text** in <strong>text</strong> um (nach htmlspecialchars). */

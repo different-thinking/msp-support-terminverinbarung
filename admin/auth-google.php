@@ -6,6 +6,9 @@
 session_start();
 
 require_once __DIR__ . '/../src/BookingService.php';
+require_once __DIR__ . '/../src/SecurityHelper.php';
+
+SecurityHelper::sendSecurityHeaders();
 
 $config = require __DIR__ . '/../config.php';
 
@@ -19,14 +22,34 @@ if ($error) {
     exit;
 }
 
-if (empty($code)) {
+if (empty($code) || empty($state)) {
     header('Location: index.php?msg=error');
     exit;
 }
 
-$service = new BookingService();
-$sourceId = $state;
+// State validieren: muss in Session vorhanden und maximal 10 Minuten alt sein
+$sessionKey = 'oauth_state_' . $state;
+$timeKey = 'oauth_state_time_' . $state;
 
+if (empty($_SESSION[$sessionKey])) {
+    error_log('Google OAuth: Invalid state parameter');
+    header('Location: index.php?msg=error');
+    exit;
+}
+
+$stateAge = time() - ($_SESSION[$timeKey] ?? 0);
+if ($stateAge > 600) {
+    unset($_SESSION[$sessionKey], $_SESSION[$timeKey]);
+    error_log('Google OAuth: State parameter expired');
+    header('Location: index.php?msg=error');
+    exit;
+}
+
+// Source-ID aus validiertem State lesen und State-Eintraege bereinigen
+$sourceId = $_SESSION[$sessionKey];
+unset($_SESSION[$sessionKey], $_SESSION[$timeKey]);
+
+$service = new BookingService();
 $calService = $service->getCalendarServiceBySourceId($sourceId);
 
 if (!$calService) {
