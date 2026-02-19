@@ -14,6 +14,9 @@
  * }
  */
 
+require_once __DIR__ . '/../src/SecurityHelper.php';
+
+SecurityHelper::sendSecurityHeaders();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache, no-store');
 
@@ -24,13 +27,21 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../src/BookingService.php';
 
 try {
+    // Gelegentlich alte Rate-Limit-Dateien bereinigen (~1% Wahrscheinlichkeit)
+    if (random_int(1, 100) === 1) {
+        SecurityHelper::cleanupRateLimitFiles();
+    }
+
+    // Rate-Limiting: Max. 5 Buchungen pro IP pro Stunde
+    if (!SecurityHelper::checkRateLimit('booking', 5, 3600)) {
+        jsonResponse(['error' => 'Zu viele Buchungsanfragen. Bitte versuchen Sie es spaeter erneut.'], 429);
+    }
+
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!is_array($input)) {
         jsonResponse(['error' => 'Ungültige JSON-Daten'], 400);
     }
-
-    // CSRF / Rate-Limiting könnten hier ergänzt werden
 
     $service = new BookingService();
     $result = $service->book($input);

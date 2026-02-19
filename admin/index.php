@@ -2,10 +2,22 @@
 /**
  * Admin-Panel: Komplette Konfiguration der Terminbuchungs-App.
  */
+// Sichere Session-Cookie-Parameter setzen
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+
+session_set_cookie_params([
+    'httponly' => true,
+    'secure' => $isHttps,
+    'samesite' => 'Strict',
+]);
 session_start();
 
 require_once __DIR__ . '/../src/ConfigManager.php';
 require_once __DIR__ . '/../src/TokenStore.php';
+require_once __DIR__ . '/../src/SecurityHelper.php';
+
+SecurityHelper::sendSecurityHeaders();
 
 $cm = new ConfigManager();
 $config = $cm->getAppConfig();
@@ -13,6 +25,7 @@ $tokenStore = new TokenStore($config['token_store']['path']);
 
 // Authentifizierung
 $authenticated = false;
+$requireSetup = false;
 $authError = '';
 
 if ($cm->hasAdminPassword()) {
@@ -20,6 +33,7 @@ if ($cm->hasAdminPassword()) {
         $authenticated = true;
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
         if ($cm->verifyAdminPassword($_POST['password'])) {
+            session_regenerate_id(true);
             $_SESSION['admin_auth'] = true;
             $authenticated = true;
         } else {
@@ -27,7 +41,22 @@ if ($cm->hasAdminPassword()) {
         }
     }
 } else {
-    $authenticated = true;
+    // Kein Passwort gesetzt: Ersteinrichtung erzwingen
+    $requireSetup = true;
+    // POST mit neuem Passwort verarbeiten
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['new_password'])) {
+        $newPw = $_POST['new_password'];
+        $confirmPw = $_POST['confirm_password'] ?? '';
+        if ($newPw === $confirmPw && strlen($newPw) >= 6) {
+            $cm->setAdminPassword($newPw);
+            session_regenerate_id(true);
+            $_SESSION['admin_auth'] = true;
+            $authenticated = true;
+            $requireSetup = false;
+        } else {
+            $authError = 'Passwoerter stimmen nicht ueberein oder sind zu kurz (min. 6 Zeichen).';
+        }
+    }
 }
 
 // Logout
@@ -62,10 +91,35 @@ foreach ($config['calendar_sources'] as $src) {
     <title>Admin – <?= htmlspecialchars($config['app']['name'] ?: 'Terminbuchung') ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
+    <meta name="csrf-token" content="<?= htmlspecialchars(SecurityHelper::generateCsrfToken()) ?>">
 </head>
 <body>
 
-<?php if (!$authenticated): ?>
+<?php if ($requireSetup): ?>
+<div class="container">
+    <div class="login-box">
+        <div class="admin-card">
+            <h2 class="panel-title">Ersteinrichtung</h2>
+            <p style="margin-bottom:16px;">Bitte legen Sie ein Admin-Passwort fest, um das Admin-Panel zu schuetzen.</p>
+            <?php if ($authError): ?>
+                <div class="alert alert-error"><?= htmlspecialchars($authError) ?></div>
+            <?php endif; ?>
+            <form method="POST">
+                <div class="form-group">
+                    <label for="new_password">Neues Passwort</label>
+                    <input type="password" id="new_password" name="new_password" minlength="6" required autofocus>
+                    <div class="form-hint">Mindestens 6 Zeichen</div>
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Passwort bestaetigen</label>
+                    <input type="password" id="confirm_password" name="confirm_password" minlength="6" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Passwort setzen & anmelden</button>
+            </form>
+        </div>
+    </div>
+</div>
+<?php elseif (!$authenticated): ?>
 <div class="container">
     <div class="login-box">
         <div class="admin-card">
@@ -454,8 +508,13 @@ foreach ($config['calendar_sources'] as $src) {
                             require_once __DIR__ . '/../src/BookingService.php';
                             $svc = new BookingService();
                             $calSvc = $svc->getCalendarServiceBySourceId($src['id']);
-                            if ($calSvc): ?>
-                                <a href="<?= htmlspecialchars($calSvc->getAuthUrl($src['id'])) ?>"
+                            if ($calSvc):
+                                // Zufaelligen OAuth-State generieren und mit Source-ID in Session speichern
+                                $oauthState = bin2hex(random_bytes(16));
+                                $_SESSION['oauth_state_' . $oauthState] = $src['id'];
+                                $_SESSION['oauth_state_time_' . $oauthState] = time();
+                            ?>
+                                <a href="<?= htmlspecialchars($calSvc->getAuthUrl($oauthState)) ?>"
                                    class="btn btn-primary btn-sm">
                                     Verbinden
                                 </a>

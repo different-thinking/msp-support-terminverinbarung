@@ -5,11 +5,23 @@
  * POST /admin/api.php?action=<action>
  * Alle Aktionen erfordern eine authentifizierte Session.
  */
+// Sichere Session-Cookie-Parameter
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+
+session_set_cookie_params([
+    'httponly' => true,
+    'secure' => $isHttps,
+    'samesite' => 'Strict',
+]);
 session_start();
-header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../src/ConfigManager.php';
 require_once __DIR__ . '/../src/TokenStore.php';
+require_once __DIR__ . '/../src/SecurityHelper.php';
+
+SecurityHelper::sendSecurityHeaders();
+header('Content-Type: application/json; charset=utf-8');
 
 $cm = new ConfigManager();
 
@@ -22,6 +34,21 @@ if ($cm->hasAdminPassword()) {
 
 $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
+
+// CSRF-Schutz für alle POST-Requests
+if ($method === 'POST') {
+    // Token aus Header oder JSON-Body lesen
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+
+    // Bei multipart-Requests (Upload) aus POST-Feld lesen
+    if ($csrfToken === null && isset($_POST['csrf_token'])) {
+        $csrfToken = $_POST['csrf_token'];
+    }
+
+    if (!SecurityHelper::validateCsrfToken($csrfToken)) {
+        jsonResponse(['error' => 'Ungültiges CSRF-Token'], 403);
+    }
+}
 
 try {
     switch ($action) {

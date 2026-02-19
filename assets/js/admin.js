@@ -6,6 +6,7 @@
     'use strict';
 
     const API = 'api.php';
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     // ==================== Tab Navigation ====================
     document.querySelectorAll('.nav-item[data-tab]').forEach(link => {
@@ -61,7 +62,10 @@
     function apiPost(action, data) {
         return fetch(API + '?action=' + action, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': CSRF_TOKEN,
+            },
             body: JSON.stringify(data),
         }).then(r => r.json());
     }
@@ -505,6 +509,7 @@
             var formData = new FormData();
             formData.append('image', file);
             formData.append('field', field);
+            formData.append('csrf_token', CSRF_TOKEN);
 
             label.classList.add('uploading');
             label.querySelector('span').textContent = 'Wird hochgeladen...';
