@@ -363,8 +363,8 @@ try {
                 jsonResponse(['error' => 'Aktuelles Passwort ist falsch'], 403);
             }
 
-            if (strlen($newPassword) < 6) {
-                jsonResponse(['error' => 'Passwort muss mindestens 6 Zeichen lang sein'], 422);
+            if (strlen($newPassword) < 12) {
+                jsonResponse(['error' => 'Passwort muss mindestens 12 Zeichen lang sein'], 422);
             }
 
             $cm->setAdminPassword($newPassword);

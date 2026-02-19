@@ -476,8 +476,8 @@
             return;
         }
 
-        if (newPw.length < 6) {
-            showToast('Passwort muss mindestens 6 Zeichen haben', 'error');
+        if (newPw.length < 12) {
+            showToast('Passwort muss mindestens 12 Zeichen haben', 'error');
             return;
         }
 

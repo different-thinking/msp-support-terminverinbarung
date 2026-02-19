@@ -86,6 +86,77 @@ class AvailabilityEngine
     }
 
     /**
+     * Prueft ob ein konkreter Zeitslot verfuegbar ist.
+     * Effizienter als getAvailableSlots(): nur ein gezielter Free/Busy-Check.
+     */
+    public function isSlotAvailable(\DateTime $start, \DateTime $end): bool
+    {
+        $tz = new \DateTimeZone($this->config['app']['timezone']);
+
+        // Arbeitszeiten pruefen
+        $dayName = strtolower($start->format('l'));
+        $workingHours = $this->config['working_hours'][$dayName] ?? null;
+        if (!$workingHours) {
+            return false;
+        }
+
+        $dayStart = clone $start;
+        $dayStart->setTime(
+            (int)substr($workingHours['start'], 0, 2),
+            (int)substr($workingHours['start'], 3, 2),
+            0
+        );
+        $dayEnd = clone $start;
+        $dayEnd->setTime(
+            (int)substr($workingHours['end'], 0, 2),
+            (int)substr($workingHours['end'], 3, 2),
+            0
+        );
+
+        if ($start < $dayStart || $end > $dayEnd) {
+            return false;
+        }
+
+        // Mindestvorlaufzeit pruefen
+        $now = new \DateTime('now', $tz);
+        $minNotice = clone $now;
+        $minNotice->modify('+' . $this->config['app']['min_notice_hours'] . ' hours');
+        if ($start < $minNotice) {
+            return false;
+        }
+
+        // Pausenzeit pruefen
+        $breakTime = $this->config['break_time'] ?? null;
+        if ($breakTime && !empty($breakTime['enabled'])) {
+            $breakStart = clone $start;
+            $breakStart->setTime(
+                (int)substr($breakTime['start'], 0, 2),
+                (int)substr($breakTime['start'], 3, 2),
+                0
+            );
+            $breakEnd = clone $start;
+            $breakEnd->setTime(
+                (int)substr($breakTime['end'], 0, 2),
+                (int)substr($breakTime['end'], 3, 2),
+                0
+            );
+            if ($this->overlaps($start, $end, $breakStart, $breakEnd)) {
+                return false;
+            }
+        }
+
+        // Busy-Slots nur fuer diesen konkreten Zeitraum abrufen
+        $busySlots = $this->collectBusySlots($start, $end);
+        foreach ($busySlots as $busy) {
+            if ($this->overlaps($start, $end, $busy['start'], $busy['end'])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Gibt verfügbare Tage in einem Monat zurück (hat mindestens einen freien Slot).
      * Optimiert: Busy-Slots werden einmal für den gesamten Monat abgefragt
      * statt für jeden Tag einzeln (1 API-Call statt ~30).

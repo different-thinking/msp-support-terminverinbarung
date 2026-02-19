@@ -33,7 +33,7 @@ $bookingInfo = $design['booking_info'] ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($appName) ?> – <?= htmlspecialchars($organizerName) ?></title>
-    <link rel="stylesheet" href="assets/css/style.css?v=<?= time() ?>">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/assets/css/style.css') ?>">
 </head>
 <body data-duration="<?= $duration ?>">
 
@@ -113,19 +113,19 @@ $bookingInfo = $design['booking_info'] ?? '';
         <div class="form-row">
             <div class="form-group">
                 <label for="field-firstname">Vorname <span class="required">*</span></label>
-                <input type="text" id="field-firstname" name="firstname" required placeholder="Ihr Vorname">
+                <input type="text" id="field-firstname" name="firstname" required placeholder="Ihr Vorname" maxlength="100">
                 <div class="form-error"></div>
             </div>
             <div class="form-group">
                 <label for="field-lastname">Nachname <span class="required">*</span></label>
-                <input type="text" id="field-lastname" name="lastname" required placeholder="Ihr Nachname">
+                <input type="text" id="field-lastname" name="lastname" required placeholder="Ihr Nachname" maxlength="100">
                 <div class="form-error"></div>
             </div>
         </div>
 
         <div class="form-group">
             <label for="field-email">E-Mail-Adresse <span class="required">*</span></label>
-            <input type="email" id="field-email" name="email" required placeholder="ihre@email.de">
+            <input type="email" id="field-email" name="email" required placeholder="ihre@email.de" maxlength="254">
             <div class="form-error"></div>
         </div>
 
@@ -141,6 +141,7 @@ $bookingInfo = $design['booking_info'] ?? '';
                 name="<?= htmlspecialchars($field['name']) ?>"
                 class="additional-field"
                 placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
+                maxlength="5000"
                 <?php if (!empty($field['required'])): ?>data-required="true"<?php endif; ?>
             ></textarea>
             <?php else: ?>
@@ -150,6 +151,7 @@ $bookingInfo = $design['booking_info'] ?? '';
                 name="<?= htmlspecialchars($field['name']) ?>"
                 class="additional-field"
                 placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
+                maxlength="500"
                 <?php if (!empty($field['required'])): ?>data-required="true"<?php endif; ?>
             >
             <?php endif; ?>
@@ -211,6 +213,6 @@ $bookingInfo = $design['booking_info'] ?? '';
     </div>
 </div>
 
-<script src="assets/js/app.js?v=<?= time() ?>"></script>
+<script src="assets/js/app.js?v=<?= filemtime(__DIR__ . '/assets/js/app.js') ?>"></script>
 </body>
 </html>

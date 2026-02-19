@@ -82,17 +82,8 @@ class BookingService
         $end = clone $start;
         $end->modify('+' . $this->config['app']['appointment_duration_minutes'] . ' minutes');
 
-        // Prüfen ob Slot noch verfügbar
-        $slots = $this->availabilityEngine->getAvailableSlots(new \DateTime($bookingData['date'], $tz));
-        $slotFound = false;
-        foreach ($slots as $slot) {
-            if ($slot['start'] === $bookingData['time']) {
-                $slotFound = true;
-                break;
-            }
-        }
-
-        if (!$slotFound) {
+        // Pruefen ob Slot noch verfuegbar (gezielter Check nur fuer diesen Zeitraum)
+        if (!$this->availabilityEngine->isSlotAvailable($start, $end)) {
             return ['success' => false, 'message' => 'Dieser Zeitslot ist leider nicht mehr verfügbar.'];
         }
 
@@ -229,10 +220,7 @@ class BookingService
 
     private function getServiceId($service): string
     {
-        // Reflection nutzen um die sourceId zu lesen
-        $ref = new \ReflectionProperty($service, 'sourceId');
-        $ref->setAccessible(true);
-        return $ref->getValue($service);
+        return $service->getSourceId();
     }
 
     private function validateBooking(array $data): array
@@ -253,10 +241,29 @@ class BookingService
             return ['valid' => false, 'error' => 'Bitte geben Sie eine gültige E-Mail-Adresse ein.'];
         }
 
-        // Zusatzfelder validieren
+        // Laengenbegrenzung fuer Standardfelder
+        if (mb_strlen($data['firstname']) > 100) {
+            return ['valid' => false, 'error' => 'Vorname darf maximal 100 Zeichen lang sein.'];
+        }
+        if (mb_strlen($data['lastname']) > 100) {
+            return ['valid' => false, 'error' => 'Nachname darf maximal 100 Zeichen lang sein.'];
+        }
+        if (mb_strlen($data['email']) > 254) {
+            return ['valid' => false, 'error' => 'E-Mail-Adresse darf maximal 254 Zeichen lang sein.'];
+        }
+
+        // Zusatzfelder validieren (Pflicht + Laenge)
         foreach ($this->config['booking_form']['additional_fields'] as $field) {
-            if (!empty($field['required']) && empty($data['fields'][$field['name']])) {
+            $fieldValue = $data['fields'][$field['name']] ?? '';
+            if (!empty($field['required']) && empty($fieldValue)) {
                 return ['valid' => false, 'error' => "Bitte füllen Sie das Feld \"{$field['label']}\" aus."];
+            }
+            if (!empty($fieldValue)) {
+                // Textarea-Felder: 5000 Zeichen (z.B. Ausgangssituation), sonstige: 500
+                $maxLen = ($field['type'] === 'textarea') ? 5000 : 500;
+                if (mb_strlen($fieldValue) > $maxLen) {
+                    return ['valid' => false, 'error' => "Das Feld \"{$field['label']}\" darf maximal {$maxLen} Zeichen lang sein."];
+                }
             }
         }
 

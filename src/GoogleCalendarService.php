@@ -22,6 +22,11 @@ class GoogleCalendarService
         $this->sourceId = $sourceConfig['id'];
     }
 
+    public function getSourceId(): string
+    {
+        return $this->sourceId;
+    }
+
     public function getAuthUrl(string $state = ''): string
     {
         $params = [
