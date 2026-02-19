@@ -330,9 +330,19 @@ class MicrosoftCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Microsoft Graph GET error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => ['message' => 'Netzwerkfehler bei Graph-API-Abfrage']];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        return json_decode($response, true) ?: [];
+        $decoded = json_decode($response, true) ?: [];
+        if ($httpCode >= 400) {
+            error_log("Microsoft Graph GET HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+        }
+        return $decoded;
     }
 
     private function graphPost(string $url, array $data, string $accessToken): array
@@ -350,9 +360,24 @@ class MicrosoftCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Microsoft Graph POST error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => ['message' => 'Netzwerkfehler bei Graph-API-Anfrage']];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        return json_decode($response, true) ?: [];
+        // sendMail gibt 202 ohne Body zurueck
+        if ($httpCode >= 200 && $httpCode < 300 && empty($response)) {
+            return [];
+        }
+
+        $decoded = json_decode($response, true) ?: [];
+        if ($httpCode >= 400) {
+            error_log("Microsoft Graph POST HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+        }
+        return $decoded;
     }
 
     private function httpPost(string $url, array $data): array
@@ -369,6 +394,12 @@ class MicrosoftCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Microsoft token endpoint error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         return json_decode($response, true) ?: [];

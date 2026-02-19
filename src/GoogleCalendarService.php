@@ -214,9 +214,19 @@ class GoogleCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Google Calendar API error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => ['message' => 'Netzwerkfehler bei Google-API-Anfrage']];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        return json_decode($response, true) ?: [];
+        $decoded = json_decode($response, true) ?: [];
+        if ($httpCode >= 400) {
+            error_log("Google Calendar API HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
+        }
+        return $decoded;
     }
 
     private function httpPost(string $url, array $data): array
@@ -233,6 +243,12 @@ class GoogleCalendarService
         ]);
 
         $response = curl_exec($ch);
+        if ($response === false) {
+            error_log('Google token endpoint error: ' . curl_error($ch));
+            curl_close($ch);
+            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+        }
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         return json_decode($response, true) ?: [];

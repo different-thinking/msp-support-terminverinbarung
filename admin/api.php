@@ -315,14 +315,19 @@ try {
             };
             $filename = $field . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
             $uploadDir = dirname(__DIR__) . '/assets/uploads/';
-            if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0750, true);
+                // PHP-Ausfuehrung im Upload-Verzeichnis verhindern
+                file_put_contents(
+                    $uploadDir . '.htaccess',
+                    "# Keine PHP-Ausfuehrung in diesem Verzeichnis\nphp_flag engine off\n<FilesMatch \"\\.(php|phtml|php3|php4|php5|phps)$\">\n    Deny from all\n</FilesMatch>\n"
+                );
+            }
 
-            // Altes Bild löschen
+            // Altes Bild sicher loeschen (Path-Traversal-Schutz)
             $design = $cm->getSection('page_design') ?: [];
             $oldPath = $design[$field] ?? '';
-            if ($oldPath && file_exists(dirname(__DIR__) . '/' . $oldPath)) {
-                unlink(dirname(__DIR__) . '/' . $oldPath);
-            }
+            safeDeleteUpload($oldPath);
 
             $destPath = $uploadDir . $filename;
             if (!move_uploaded_file($file['tmp_name'], $destPath)) {
@@ -344,9 +349,7 @@ try {
             }
             $design = $cm->getSection('page_design') ?: [];
             $oldPath = $design[$field] ?? '';
-            if ($oldPath && file_exists(dirname(__DIR__) . '/' . $oldPath)) {
-                unlink(dirname(__DIR__) . '/' . $oldPath);
-            }
+            safeDeleteUpload($oldPath);
             $design[$field] = '';
             $cm->saveSection('page_design', $design);
             jsonResponse(['success' => true]);
@@ -402,4 +405,28 @@ function getJsonInput(): array
         jsonResponse(['error' => 'Ungültige JSON-Daten'], 400);
     }
     return $input;
+}
+
+/**
+ * Loescht eine Bild-Datei sicher – nur wenn der Pfad innerhalb von assets/uploads/ liegt.
+ * Verhindert Path-Traversal-Angriffe.
+ */
+function safeDeleteUpload(string $relativePath): void
+{
+    if (empty($relativePath)) {
+        return;
+    }
+
+    $baseDir = realpath(dirname(__DIR__) . '/assets/uploads');
+    if ($baseDir === false) {
+        return; // Upload-Verzeichnis existiert nicht
+    }
+
+    $fullPath = dirname(__DIR__) . '/' . $relativePath;
+    $realPath = realpath($fullPath);
+
+    // Nur loeschen wenn die Datei existiert UND innerhalb des Upload-Verzeichnisses liegt
+    if ($realPath !== false && str_starts_with($realPath, $baseDir . DIRECTORY_SEPARATOR)) {
+        unlink($realPath);
+    }
 }

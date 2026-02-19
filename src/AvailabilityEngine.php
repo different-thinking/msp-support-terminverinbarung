@@ -33,18 +33,12 @@ class AvailabilityEngine
         }
 
         $dayStart = clone $date;
-        $dayStart->setTime(
-            (int)substr($workingHours['start'], 0, 2),
-            (int)substr($workingHours['start'], 3, 2),
-            0
-        );
+        [$sh, $sm] = $this->parseTime($workingHours['start']);
+        $dayStart->setTime($sh, $sm, 0);
 
         $dayEnd = clone $date;
-        $dayEnd->setTime(
-            (int)substr($workingHours['end'], 0, 2),
-            (int)substr($workingHours['end'], 3, 2),
-            0
-        );
+        [$eh, $em] = $this->parseTime($workingHours['end']);
+        $dayEnd->setTime($eh, $em, 0);
 
         // Busy-Zeiten aus allen Kalender-Quellen sammeln
         $allBusySlots = $this->collectBusySlots($dayStart, $dayEnd);
@@ -52,18 +46,12 @@ class AvailabilityEngine
         // Pausenzeit als Busy-Slot hinzufügen
         $breakTime = $this->config['break_time'] ?? null;
         if ($breakTime && !empty($breakTime['enabled'])) {
+            [$bsh, $bsm] = $this->parseTime($breakTime['start']);
             $breakStart = clone $date;
-            $breakStart->setTime(
-                (int)substr($breakTime['start'], 0, 2),
-                (int)substr($breakTime['start'], 3, 2),
-                0
-            );
+            $breakStart->setTime($bsh, $bsm, 0);
+            [$beh, $bem] = $this->parseTime($breakTime['end']);
             $breakEnd = clone $date;
-            $breakEnd->setTime(
-                (int)substr($breakTime['end'], 0, 2),
-                (int)substr($breakTime['end'], 3, 2),
-                0
-            );
+            $breakEnd->setTime($beh, $bem, 0);
             $allBusySlots[] = ['start' => $breakStart, 'end' => $breakEnd];
         }
 
@@ -100,18 +88,13 @@ class AvailabilityEngine
             return false;
         }
 
+        [$sh, $sm] = $this->parseTime($workingHours['start']);
         $dayStart = clone $start;
-        $dayStart->setTime(
-            (int)substr($workingHours['start'], 0, 2),
-            (int)substr($workingHours['start'], 3, 2),
-            0
-        );
+        $dayStart->setTime($sh, $sm, 0);
+
+        [$eh, $em] = $this->parseTime($workingHours['end']);
         $dayEnd = clone $start;
-        $dayEnd->setTime(
-            (int)substr($workingHours['end'], 0, 2),
-            (int)substr($workingHours['end'], 3, 2),
-            0
-        );
+        $dayEnd->setTime($eh, $em, 0);
 
         if ($start < $dayStart || $end > $dayEnd) {
             return false;
@@ -128,18 +111,12 @@ class AvailabilityEngine
         // Pausenzeit pruefen
         $breakTime = $this->config['break_time'] ?? null;
         if ($breakTime && !empty($breakTime['enabled'])) {
+            [$bsh, $bsm] = $this->parseTime($breakTime['start']);
             $breakStart = clone $start;
-            $breakStart->setTime(
-                (int)substr($breakTime['start'], 0, 2),
-                (int)substr($breakTime['start'], 3, 2),
-                0
-            );
+            $breakStart->setTime($bsh, $bsm, 0);
+            [$beh, $bem] = $this->parseTime($breakTime['end']);
             $breakEnd = clone $start;
-            $breakEnd->setTime(
-                (int)substr($breakTime['end'], 0, 2),
-                (int)substr($breakTime['end'], 3, 2),
-                0
-            );
+            $breakEnd->setTime($beh, $bem, 0);
             if ($this->overlaps($start, $end, $breakStart, $breakEnd)) {
                 return false;
             }
@@ -197,39 +174,27 @@ class AvailabilityEngine
                 continue; // Kein Arbeitstag
             }
 
+            [$sh, $sm] = $this->parseTime($workingHours['start']);
             $dayStart = clone $date;
-            $dayStart->setTime(
-                (int)substr($workingHours['start'], 0, 2),
-                (int)substr($workingHours['start'], 3, 2),
-                0
-            );
+            $dayStart->setTime($sh, $sm, 0);
 
+            [$eh, $em] = $this->parseTime($workingHours['end']);
             $dayEnd = clone $date;
-            $dayEnd->setTime(
-                (int)substr($workingHours['end'], 0, 2),
-                (int)substr($workingHours['end'], 3, 2),
-                0
-            );
+            $dayEnd->setTime($eh, $em, 0);
 
             // Nur Busy-Slots dieses Tages filtern
             $dayBusy = array_filter($allBusySlots, function ($busy) use ($dayStart, $dayEnd) {
                 return $busy['start'] < $dayEnd && $busy['end'] > $dayStart;
             });
 
-            // Pausenzeit als Busy-Slot hinzufügen
+            // Pausenzeit als Busy-Slot hinzufuegen
             if ($breakEnabled) {
+                [$bsh, $bsm] = $this->parseTime($breakTime['start']);
                 $breakStart = clone $date;
-                $breakStart->setTime(
-                    (int)substr($breakTime['start'], 0, 2),
-                    (int)substr($breakTime['start'], 3, 2),
-                    0
-                );
+                $breakStart->setTime($bsh, $bsm, 0);
+                [$beh, $bem] = $this->parseTime($breakTime['end']);
                 $breakEnd = clone $date;
-                $breakEnd->setTime(
-                    (int)substr($breakTime['end'], 0, 2),
-                    (int)substr($breakTime['end'], 3, 2),
-                    0
-                );
+                $breakEnd->setTime($beh, $bem, 0);
                 $dayBusy[] = ['start' => $breakStart, 'end' => $breakEnd];
             }
 
@@ -270,15 +235,20 @@ class AvailabilityEngine
             return [];
         }
 
-        // Bei nur einem Request kein curl_multi nötig
+        // Bei nur einem Request kein curl_multi noetig
         if (count($requests) === 1) {
             $req = $requests[0];
             $response = curl_exec($req['handle']);
+            if ($response === false) {
+                error_log('Calendar Free/Busy curl error: ' . curl_error($req['handle']));
+                curl_close($req['handle']);
+                return [];
+            }
             curl_close($req['handle']);
-            return $req['service']->parseFreeBusyResponse($response ?: '');
+            return $req['service']->parseFreeBusyResponse($response);
         }
 
-        // Parallel ausführen
+        // Parallel ausfuehren
         $mh = curl_multi_init();
         foreach ($requests as $req) {
             curl_multi_add_handle($mh, $req['handle']);
@@ -294,6 +264,13 @@ class AvailabilityEngine
         // Ergebnisse sammeln und parsen
         $allBusy = [];
         foreach ($requests as $req) {
+            $errno = curl_errno($req['handle']);
+            if ($errno !== 0) {
+                error_log('Calendar Free/Busy curl_multi error: ' . curl_error($req['handle']));
+                curl_multi_remove_handle($mh, $req['handle']);
+                curl_close($req['handle']);
+                continue;
+            }
             $response = curl_multi_getcontent($req['handle']);
             $allBusy = array_merge(
                 $allBusy,
@@ -383,6 +360,21 @@ class AvailabilityEngine
         }
 
         return $slots;
+    }
+
+    /**
+     * Parsed einen Zeitstring (z.B. "9:00", "09:00", "17:30") in [Stunde, Minute].
+     * Robuster als substr() – funktioniert mit und ohne fuehrende Null.
+     *
+     * @return array{0: int, 1: int}
+     */
+    private function parseTime(string $time): array
+    {
+        $parts = explode(':', $time);
+        return [
+            (int)($parts[0] ?? 0),
+            (int)($parts[1] ?? 0),
+        ];
     }
 
     /**
