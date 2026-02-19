@@ -400,7 +400,7 @@ try {
             foreach ($bookingForm['additional_fields'] ?? [] as $fieldDef) {
                 $name = $fieldDef['name'] ?? '';
                 if (empty($name)) continue;
-                $testFields[$name] = !empty($fieldDef['placeholder']) ? $fieldDef['placeholder'] : ($fieldDef['label'] ?? $name);
+                $testFields[$name] = $name;
             }
 
             $testBooking = [
