@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/CalendarServiceInterface.php';
+require_once __DIR__ . '/SecurityHelper.php';
+
 /**
  * Berechnet die Verfügbarkeit basierend auf mehreren Kalender-Quellen.
  * Merged Busy-Zeiten und erzeugt buchbare Zeitslots.
@@ -7,8 +10,12 @@
 class AvailabilityEngine
 {
     private array $config;
+    /** @var CalendarServiceInterface[] */
     private array $calendarServices;
 
+    /**
+     * @param CalendarServiceInterface[] $calendarServices
+     */
     public function __construct(array $config, array $calendarServices)
     {
         $this->config = $config;
@@ -240,7 +247,7 @@ class AvailabilityEngine
             $req = $requests[0];
             $response = curl_exec($req['handle']);
             if ($response === false) {
-                error_log('Calendar Free/Busy curl error: ' . curl_error($req['handle']));
+                SecurityHelper::logError('Availability', 'Free/Busy curl error: ' . curl_error($req['handle']));
                 curl_close($req['handle']);
                 return [];
             }
@@ -266,7 +273,7 @@ class AvailabilityEngine
         foreach ($requests as $req) {
             $errno = curl_errno($req['handle']);
             if ($errno !== 0) {
-                error_log('Calendar Free/Busy curl_multi error: ' . curl_error($req['handle']));
+                SecurityHelper::logError('Availability', 'Free/Busy curl_multi error: ' . curl_error($req['handle']));
                 curl_multi_remove_handle($mh, $req['handle']);
                 curl_close($req['handle']);
                 continue;

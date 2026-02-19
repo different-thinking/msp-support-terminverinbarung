@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/TokenStore.php';
+require_once __DIR__ . '/CalendarServiceInterface.php';
 require_once __DIR__ . '/MicrosoftCalendarService.php';
 require_once __DIR__ . '/GoogleCalendarService.php';
 require_once __DIR__ . '/AvailabilityEngine.php';
@@ -84,22 +85,25 @@ class BookingService
             return ['success' => false, 'message' => 'Dieser Zeitslot ist leider nicht mehr verfügbar.'];
         }
 
-        // Teilnehmer zusammenstellen
+        // Teilnehmer zusammenstellen (Duplikate per E-Mail verhindern)
+        $primaryEmail = strtolower(trim($bookingData['email']));
         $attendees = [
             [
-                'email' => $bookingData['email'],
+                'email' => $primaryEmail,
                 'name' => $bookingData['firstname'] . ' ' . $bookingData['lastname'],
             ],
         ];
+        $seenEmails = [$primaryEmail];
 
         if (!empty($bookingData['additional_attendees'])) {
             foreach ($bookingData['additional_attendees'] as $attEmail) {
-                $attEmail = trim($attEmail);
-                if (filter_var($attEmail, FILTER_VALIDATE_EMAIL)) {
+                $attEmail = strtolower(trim($attEmail));
+                if (filter_var($attEmail, FILTER_VALIDATE_EMAIL) && !in_array($attEmail, $seenEmails)) {
                     $attendees[] = [
                         'email' => $attEmail,
                         'name' => $attEmail,
                     ];
+                    $seenEmails[] = $attEmail;
                 }
             }
         }
@@ -137,7 +141,7 @@ class BookingService
 
         if (!$event || isset($event['error'])) {
             $errorMsg = $event['error']['message'] ?? 'Unbekannter Fehler bei der Terminerstellung.';
-            error_log('Graph API Event creation failed: ' . $errorMsg);
+            SecurityHelper::logError('Booking', 'Event creation failed: ' . $errorMsg);
             return ['success' => false, 'message' => 'Der Termin konnte nicht erstellt werden. Bitte versuchen Sie es später erneut.'];
         }
 
@@ -165,7 +169,7 @@ class BookingService
     /**
      * Gibt den Kalender-Service zurück, der Booking-Ziel ist.
      */
-    public function getBookingTarget(): ?object
+    public function getBookingTarget(): ?CalendarServiceInterface
     {
         foreach ($this->config['calendar_sources'] as $source) {
             if (!empty($source['is_booking_target'])) {
@@ -183,7 +187,7 @@ class BookingService
     /**
      * Gibt einen Kalender-Service nach Source-ID zurück.
      */
-    public function getCalendarServiceBySourceId(string $sourceId): ?object
+    public function getCalendarServiceBySourceId(string $sourceId): ?CalendarServiceInterface
     {
         $timezone = $this->config['app']['timezone'] ?? 'Europe/Berlin';
 
@@ -245,7 +249,7 @@ class BookingService
         }
     }
 
-    private function getServiceId($service): string
+    private function getServiceId(CalendarServiceInterface $service): string
     {
         return $service->getSourceId();
     }
@@ -347,7 +351,7 @@ class BookingService
         } catch (\Exception $e) {
             // Mail-Fehler nicht an den Buchenden weitergeben,
             // der Termin wurde bereits erfolgreich erstellt
-            error_log('Owner notification mail failed: ' . $e->getMessage());
+            SecurityHelper::logError('Booking', 'Owner notification mail failed', $e);
         }
     }
 

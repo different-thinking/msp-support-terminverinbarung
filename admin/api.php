@@ -20,6 +20,11 @@ require_once __DIR__ . '/../src/ConfigManager.php';
 require_once __DIR__ . '/../src/TokenStore.php';
 require_once __DIR__ . '/../src/SecurityHelper.php';
 
+// Konstanten
+const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_ADDITIONAL_ATTENDEES = 20;
+const MIN_PASSWORD_LENGTH = 12;
+
 SecurityHelper::sendSecurityHeaders();
 header('Content-Type: application/json; charset=utf-8');
 
@@ -164,7 +169,7 @@ try {
             $form = [
                 'additional_fields' => $fields,
                 'allow_additional_attendees' => !empty($input['allow_additional_attendees']),
-                'max_additional_attendees' => max(0, min(20, (int)($input['max_additional_attendees'] ?? 5))),
+                'max_additional_attendees' => max(0, min(MAX_ADDITIONAL_ATTENDEES, (int)($input['max_additional_attendees'] ?? 5))),
             ];
             $cm->saveSection('booking_form', $form);
             jsonResponse(['success' => true]);
@@ -303,7 +308,7 @@ try {
             if (!in_array($mime, $allowed)) {
                 jsonResponse(['error' => 'Nur JPG, PNG, WebP und GIF erlaubt'], 400);
             }
-            if ($file['size'] > 5 * 1024 * 1024) {
+            if ($file['size'] > MAX_UPLOAD_SIZE_BYTES) {
                 jsonResponse(['error' => 'Maximale Dateigröße: 5 MB'], 400);
             }
             $ext = match ($mime) {
@@ -445,7 +450,7 @@ try {
                 jsonResponse(['error' => 'Aktuelles Passwort ist falsch'], 403);
             }
 
-            if (strlen($newPassword) < 12) {
+            if (strlen($newPassword) < MIN_PASSWORD_LENGTH) {
                 jsonResponse(['error' => 'Passwort muss mindestens 12 Zeichen lang sein'], 422);
             }
 

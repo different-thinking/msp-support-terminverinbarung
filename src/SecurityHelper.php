@@ -5,6 +5,13 @@
  */
 class SecurityHelper
 {
+    /** CSRF-Token-Laenge in Bytes (wird als Hex-String doppelt so lang) */
+    private const CSRF_TOKEN_BYTES = 32;
+    /** Max. Alter von Rate-Limit-Dateien in Sekunden bevor sie geloescht werden */
+    private const RATELIMIT_CLEANUP_AGE_SECONDS = 7200;
+    /** HSTS max-age in Sekunden (1 Jahr) */
+    private const HSTS_MAX_AGE_SECONDS = 31536000;
+
     // ==================== CSRF ====================
 
     /**
@@ -17,7 +24,7 @@ class SecurityHelper
         }
 
         if (empty($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(self::CSRF_TOKEN_BYTES));
         }
 
         return $_SESSION['csrf_token'];
@@ -89,7 +96,7 @@ class SecurityHelper
         $rateLimitDir = dirname(__DIR__) . '/data/ratelimit';
         if (!is_dir($rateLimitDir)) return;
 
-        $cutoff = time() - 7200;
+        $cutoff = time() - self::RATELIMIT_CLEANUP_AGE_SECONDS;
         foreach (glob($rateLimitDir . '/*.json') as $file) {
             if (filemtime($file) < $cutoff) {
                 unlink($file);
@@ -115,8 +122,54 @@ class SecurityHelper
         header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 
         if (self::isHttps()) {
-            header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+            header('Strict-Transport-Security: max-age=' . self::HSTS_MAX_AGE_SECONDS . '; includeSubDomains');
         }
+    }
+
+    // ==================== Logging ====================
+
+    /** Sensible Schluesselwoerter die in Logs redacted werden */
+    private const SENSITIVE_KEYS = ['access_token', 'refresh_token', 'client_secret', 'password', 'authorization'];
+
+    /**
+     * Zentrales Error-Logging mit einheitlichem Format.
+     * Redacted automatisch sensitive Daten (Tokens, Secrets, Passwoerter).
+     *
+     * @param string $context  Kontext/Quelle (z.B. 'Graph API', 'TokenStore')
+     * @param string $message  Fehlermeldung
+     * @param ?\Throwable $e   Optionale Exception
+     */
+    public static function logError(string $context, string $message, ?\Throwable $e = null): void
+    {
+        $message = self::redactSensitiveData($message);
+        $logLine = "[{$context}] {$message}";
+
+        if ($e !== null) {
+            $exMsg = self::redactSensitiveData($e->getMessage());
+            $logLine .= " | Exception: {$exMsg} in {$e->getFile()}:{$e->getLine()}";
+        }
+
+        error_log($logLine);
+    }
+
+    /**
+     * Ersetzt sensitive Daten in einem String durch [REDACTED].
+     */
+    private static function redactSensitiveData(string $text): string
+    {
+        // Bearer-Tokens redacten (Bearer xxxxx...)
+        $text = preg_replace('/Bearer\s+[A-Za-z0-9\-._~+\/]+=*/i', 'Bearer [REDACTED]', $text);
+
+        // Schluesselwort=wert Paare redacten
+        foreach (self::SENSITIVE_KEYS as $key) {
+            $text = preg_replace(
+                '/(' . preg_quote($key, '/') . '[\s]*[=:]\s*)[^\s&,;"\'}\]]+/i',
+                '$1[REDACTED]',
+                $text
+            );
+        }
+
+        return $text;
     }
 
     /**
