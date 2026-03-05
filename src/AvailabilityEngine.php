@@ -62,6 +62,16 @@ class AvailabilityEngine
             $allBusySlots[] = ['start' => $breakStart, 'end' => $breakEnd];
         }
 
+        // Pufferzeit nach jedem Busy-Slot hinzufuegen
+        $bufferMinutes = (int)($this->config['app']['buffer_minutes'] ?? 0);
+        if ($bufferMinutes > 0) {
+            foreach ($allBusySlots as &$busy) {
+                $busy['end'] = clone $busy['end'];
+                $busy['end']->modify("+{$bufferMinutes} minutes");
+            }
+            unset($busy);
+        }
+
         // Busy-Zeiten zusammenführen und überlappende mergen
         $mergedBusy = $this->mergeBusySlots($allBusySlots);
 
@@ -129,10 +139,19 @@ class AvailabilityEngine
             }
         }
 
-        // Busy-Slots nur fuer diesen konkreten Zeitraum abrufen
-        $busySlots = $this->collectBusySlots($start, $end);
+        // Busy-Slots nur fuer diesen konkreten Zeitraum abrufen (inkl. Puffer davor)
+        $bufferMinutes = (int)($this->config['app']['buffer_minutes'] ?? 0);
+        $queryStart = clone $start;
+        if ($bufferMinutes > 0) {
+            $queryStart->modify("-{$bufferMinutes} minutes");
+        }
+        $busySlots = $this->collectBusySlots($queryStart, $end);
         foreach ($busySlots as $busy) {
-            if ($this->overlaps($start, $end, $busy['start'], $busy['end'])) {
+            $busyEnd = clone $busy['end'];
+            if ($bufferMinutes > 0) {
+                $busyEnd->modify("+{$bufferMinutes} minutes");
+            }
+            if ($this->overlaps($start, $end, $busy['start'], $busyEnd)) {
                 return false;
             }
         }
@@ -169,6 +188,9 @@ class AvailabilityEngine
         $minNotice = clone $now;
         $minNotice->modify('+' . $this->config['app']['min_notice_hours'] . ' hours');
 
+        // Pufferzeit
+        $bufferMinutes = (int)($this->config['app']['buffer_minutes'] ?? 0);
+
         for ($day = 1; $day <= $daysInMonth; $day++) {
             $date = new \DateTime("{$year}-{$month}-{$day}", $tz);
             $dateStr = $date->format('Y-m-d');
@@ -203,6 +225,15 @@ class AvailabilityEngine
                 $breakEnd = clone $date;
                 $breakEnd->setTime($beh, $bem, 0);
                 $dayBusy[] = ['start' => $breakStart, 'end' => $breakEnd];
+            }
+
+            // Pufferzeit nach jedem Busy-Slot hinzufuegen
+            if ($bufferMinutes > 0) {
+                foreach ($dayBusy as &$busy) {
+                    $busy['end'] = clone $busy['end'];
+                    $busy['end']->modify("+{$bufferMinutes} minutes");
+                }
+                unset($busy);
             }
 
             $mergedBusy = $this->mergeBusySlots(array_values($dayBusy));

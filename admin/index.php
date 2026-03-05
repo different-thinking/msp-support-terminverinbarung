@@ -273,6 +273,14 @@ foreach ($config['calendar_sources'] as $src) {
                         <div class="form-hint">Abstand zwischen Zeitslots</div>
                     </div>
                 </div>
+                <div class="form-row form-row-3">
+                    <div class="form-group">
+                        <label for="app-buffer">Pufferzeit (Minuten)</label>
+                        <input type="number" id="app-buffer" name="buffer_minutes"
+                               value="<?= (int)$config['app']['buffer_minutes'] ?>" min="0" step="5">
+                        <div class="form-hint">Zeitpuffer nach vorherigen Terminen</div>
+                    </div>
+                </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Speichern</button>
                 </div>

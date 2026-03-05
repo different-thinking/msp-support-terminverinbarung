@@ -83,6 +83,9 @@ class ConfigManager
                 if (isset($value['slot_interval_minutes']) && (!is_int($value['slot_interval_minutes']) || $value['slot_interval_minutes'] < 5)) {
                     throw new \InvalidArgumentException('Slot-Intervall muss mindestens 5 Minuten betragen');
                 }
+                if (isset($value['buffer_minutes']) && (!is_int($value['buffer_minutes']) || $value['buffer_minutes'] < 0)) {
+                    throw new \InvalidArgumentException('Pufferzeit muss mindestens 0 Minuten betragen');
+                }
                 if (isset($value['booking_horizon_days']) && (!is_int($value['booking_horizon_days']) || $value['booking_horizon_days'] < 1)) {
                     throw new \InvalidArgumentException('Buchungshorizont muss mindestens 1 Tag sein');
                 }
@@ -244,6 +247,7 @@ class ConfigManager
                 'booking_horizon_days' => 30,
                 'min_notice_hours' => 24,
                 'slot_interval_minutes' => 30,
+                'buffer_minutes' => 0,
             ],
             'working_hours' => [
                 'monday'    => ['start' => '09:00', 'end' => '17:00'],

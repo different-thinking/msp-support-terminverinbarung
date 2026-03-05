@@ -96,6 +96,7 @@
             booking_horizon_days: document.getElementById('app-horizon').value,
             min_notice_hours: document.getElementById('app-notice').value,
             slot_interval_minutes: document.getElementById('app-interval').value,
+            buffer_minutes: document.getElementById('app-buffer').value,
         };
 
         apiPost('save-app', data).then(res => {
