@@ -89,6 +89,7 @@ try {
                 'booking_horizon_days' => max(1, (int)($input['booking_horizon_days'] ?? 30)),
                 'min_notice_hours' => max(0, (int)($input['min_notice_hours'] ?? 24)),
                 'slot_interval_minutes' => max(5, (int)($input['slot_interval_minutes'] ?? 30)),
+                'buffer_minutes' => max(0, (int)($input['buffer_minutes'] ?? 0)),
             ];
             $cm->saveSection('app', $app);
             jsonResponse(['success' => true]);
