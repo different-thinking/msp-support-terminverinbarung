@@ -805,8 +805,17 @@ body {
 
 /* Mobile Bottom-Bar + Panel (hidden on desktop) */
 .mobile-bottom-bar { display: none; }
-.mobile-panel-overlay { display: none; }
-.mobile-panel { display: none; }
+.mobile-panel {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 48px;
+    background: white;
+    flex-direction: column;
+    z-index: 60;
+}
 
 /* ==================== Responsive ==================== */
 @media (max-width: 768px) {
@@ -882,67 +891,34 @@ body {
         color: var(--error);
     }
 
-    /* ===== Mobile Panel Overlay ===== */
-    .mobile-panel-overlay {
-        display: block;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.3);
-        z-index: 59;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.3s;
-    }
+    /* ===== Mobile Fullscreen-Panel ===== */
+    /* display:none by default, JS toggles to display:flex */
 
-    .mobile-panel-overlay.visible {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    /* ===== Mobile Slide-Up Panel ===== */
-    .mobile-panel {
+    .mobile-panel-header {
         display: flex;
-        flex-direction: column;
-        position: fixed;
-        bottom: 48px;
-        left: 0;
-        right: 0;
-        max-height: 65vh;
-        background: white;
-        border-top-left-radius: 16px;
-        border-top-right-radius: 16px;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
-        z-index: 60;
-        transform: translateY(100%);
-        transition: transform 0.3s ease;
-    }
-
-    .mobile-panel.open {
-        transform: translateY(0);
-    }
-
-    .mobile-panel-handle {
-        display: flex;
-        justify-content: center;
-        padding: 10px 0 6px;
-        cursor: grab;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--gray-200);
         flex-shrink: 0;
     }
 
-    .mobile-panel-handle-bar {
-        width: 36px;
-        height: 4px;
-        background: var(--gray-300);
-        border-radius: 2px;
+    .mobile-panel-header h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .mobile-panel-header .btn-close {
+        font-size: 18px;
+        padding: 8px;
     }
 
     .mobile-panel-content {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding-bottom: 8px;
+        padding: 16px;
+        flex: 1;
     }
 
     .cal-toolbar {

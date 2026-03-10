@@ -810,58 +810,11 @@
     function bindMobilePanel() {
         var toggle = document.getElementById('mobileBottomToggle');
         var panel = document.getElementById('mobilePanel');
-        var overlay = document.getElementById('mobilePanelOverlay');
-        var bar = document.getElementById('mobileBottomBar');
-        if (!toggle || !panel || !overlay || !bar) return;
+        if (!toggle || !panel) return;
 
-        var isOpen = false;
-
-        function openPanel() {
-            isOpen = true;
-            panel.classList.add('open');
-            overlay.classList.remove('hidden');
-            overlay.classList.add('visible');
-            bar.classList.add('open');
-        }
-
-        function closePanel() {
-            isOpen = false;
-            panel.classList.remove('open');
-            overlay.classList.remove('visible');
-            bar.classList.remove('open');
-            setTimeout(function () {
-                if (!panel.classList.contains('open')) {
-                    overlay.classList.add('hidden');
-                }
-            }, 300);
-        }
-
-        function togglePanel() {
-            if (isOpen) { closePanel(); } else { openPanel(); }
-        }
-
-        // Tap auf Toggle-Button
-        toggle.addEventListener('click', togglePanel);
-
-        // Tap auf Overlay schließt Panel
-        overlay.addEventListener('click', closePanel);
-
-        // Swipe-up auf Bottom-Bar öffnet, Swipe-down auf Panel schließt
-        var touchStartY = 0;
-        bar.addEventListener('touchstart', function (e) {
-            touchStartY = e.touches[0].clientY;
-        }, { passive: true });
-        bar.addEventListener('touchend', function (e) {
-            var diff = touchStartY - e.changedTouches[0].clientY;
-            if (diff > 30 && !isOpen) openPanel();
-        });
-
-        panel.addEventListener('touchstart', function (e) {
-            touchStartY = e.touches[0].clientY;
-        }, { passive: true });
-        panel.addEventListener('touchend', function (e) {
-            var diff = e.changedTouches[0].clientY - touchStartY;
-            if (diff > 50 && isOpen) closePanel();
+        toggle.addEventListener('click', function () {
+            var visible = panel.style.display === 'flex';
+            panel.style.display = visible ? 'none' : 'flex';
         });
     }
 
