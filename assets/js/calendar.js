@@ -32,6 +32,7 @@
         }
         bindToolbar();
         bindPopup();
+        if (isMobile()) bindMobilePanel();
         // Buttons korrekt initialisieren
         document.querySelectorAll('.btn-view').forEach(function (b) {
             b.classList.toggle('active', b.dataset.view === state.view);
@@ -73,6 +74,10 @@
             restoreCalendarSelection();
             renderSourcesSidebar();
             renderMiniCalendar();
+            if (isMobile()) {
+                renderMobileSourcesList();
+                renderMobileMiniCalendar();
+            }
             loadEvents();
         } catch (e) {
             document.getElementById('calSourcesList').innerHTML =
@@ -387,6 +392,7 @@
                 state.currentDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
                 state.miniDate = new Date(state.currentDate);
                 renderMiniCalendar();
+                if (isMobile()) renderMobileMiniCalendar();
                 loadEvents();
             });
         });
@@ -797,6 +803,169 @@
         if (body) {
             body.scrollTop = 8 * 48;
         }
+    }
+
+    // ==================== Mobile Panel ====================
+
+    function bindMobilePanel() {
+        var toggle = document.getElementById('mobileBottomToggle');
+        var panel = document.getElementById('mobilePanel');
+        var overlay = document.getElementById('mobilePanelOverlay');
+        var bar = document.getElementById('mobileBottomBar');
+
+        function openPanel() {
+            panel.classList.add('open');
+            overlay.classList.remove('hidden');
+            overlay.classList.add('visible');
+            bar.classList.add('open');
+        }
+
+        function closePanel() {
+            panel.classList.remove('open');
+            overlay.classList.remove('visible');
+            bar.classList.remove('open');
+            setTimeout(function () {
+                if (!panel.classList.contains('open')) {
+                    overlay.classList.add('hidden');
+                }
+            }, 300);
+        }
+
+        toggle.addEventListener('click', function () {
+            if (panel.classList.contains('open')) {
+                closePanel();
+            } else {
+                openPanel();
+            }
+        });
+
+        overlay.addEventListener('click', closePanel);
+    }
+
+    function renderMobileMiniCalendar() {
+        var container = document.getElementById('miniCalendarMobile');
+        if (!container) return;
+        var d = state.miniDate || state.currentDate;
+        var year = d.getFullYear();
+        var month = d.getMonth();
+
+        var html = '<div class="mini-cal-nav">' +
+            '<button id="miniPrevMobile">&#9664;</button>' +
+            '<span class="mini-cal-title">' + SHORT_MONTHS[month] + ' ' + year + '</span>' +
+            '<button id="miniNextMobile">&#9654;</button>' +
+            '</div>';
+
+        html += '<div class="mini-cal-grid">';
+        DAY_NAMES.forEach(function (dn) {
+            html += '<div class="mini-cal-weekday">' + dn + '</div>';
+        });
+
+        var first = new Date(year, month, 1);
+        var startDay = (first.getDay() + 6) % 7;
+        var last = new Date(year, month + 1, 0);
+
+        for (var i = startDay - 1; i >= 0; i--) {
+            var pd = new Date(year, month, -i);
+            html += '<div class="mini-cal-day other-month" data-date="' + formatDateOnly(pd) + '">' + pd.getDate() + '</div>';
+        }
+
+        for (var day = 1; day <= last.getDate(); day++) {
+            var cd = new Date(year, month, day);
+            var classes = 'mini-cal-day';
+            if (isToday(cd)) classes += ' today';
+            if (isSameDay(cd, state.currentDate)) classes += ' selected';
+            html += '<div class="' + classes + '" data-date="' + formatDateOnly(cd) + '">' + day + '</div>';
+        }
+
+        var endDay = (last.getDay() + 6) % 7;
+        for (var j = 1; j <= 6 - endDay; j++) {
+            var nd = new Date(year, month + 1, j);
+            html += '<div class="mini-cal-day other-month" data-date="' + formatDateOnly(nd) + '">' + j + '</div>';
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        document.getElementById('miniPrevMobile').addEventListener('click', function () {
+            state.miniDate.setMonth(state.miniDate.getMonth() - 1);
+            renderMobileMiniCalendar();
+        });
+
+        document.getElementById('miniNextMobile').addEventListener('click', function () {
+            state.miniDate.setMonth(state.miniDate.getMonth() + 1);
+            renderMobileMiniCalendar();
+        });
+
+        container.querySelectorAll('.mini-cal-day').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var dateStr = this.dataset.date;
+                if (!dateStr) return;
+                var parts = dateStr.split('-');
+                state.currentDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                state.miniDate = new Date(state.currentDate);
+                renderMiniCalendar();
+                renderMobileMiniCalendar();
+                loadEvents();
+            });
+        });
+    }
+
+    function renderMobileSourcesList() {
+        var container = document.getElementById('calSourcesListMobile');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (state.sources.length === 0) {
+            container.innerHTML = '<div class="cal-loading">Keine Kalender konfiguriert.</div>';
+            return;
+        }
+
+        state.sources.forEach(function (src) {
+            if (!src.connected || src.calendars.length === 0) return;
+
+            var group = document.createElement('div');
+            group.className = 'cal-source-group';
+
+            var label = document.createElement('div');
+            label.className = 'cal-source-group-label';
+            label.innerHTML = '<span class="cal-source-type-icon">' +
+                (src.type === 'microsoft' ? 'M365' : 'Google') + '</span>';
+            group.appendChild(label);
+
+            src.calendars.forEach(function (cal) {
+                var key = src.id + ':' + cal.id;
+                var calData = state.selectedCalendars.get(key);
+                if (!calData) return;
+
+                var item = document.createElement('label');
+                item.className = 'cal-source-item';
+
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'cal-source-checkbox';
+                checkbox.checked = calData.checked;
+                checkbox.addEventListener('change', function () {
+                    calData.checked = this.checked;
+                    saveCalendarSelection();
+                    loadEvents();
+                });
+
+                var colorDot = document.createElement('span');
+                colorDot.className = 'cal-source-color';
+                colorDot.style.backgroundColor = calData.color;
+
+                var name = document.createElement('span');
+                name.className = 'cal-source-name';
+                name.textContent = cal.name;
+
+                item.appendChild(checkbox);
+                item.appendChild(colorDot);
+                item.appendChild(name);
+                group.appendChild(item);
+            });
+
+            container.appendChild(group);
+        });
     }
 
     // ==================== Event Popup ====================
