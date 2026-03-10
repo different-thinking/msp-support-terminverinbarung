@@ -42,6 +42,16 @@ if ($action === 'sources') {
         $calendars = [];
         if ($connected) {
             $calendars = fetchCalendarList($src, $tokenStore, $timezone);
+            // Fallback: Wenn die API keine Kalender liefert, die konfigurierten IDs verwenden
+            if (empty($calendars) && !empty($src['calendars'])) {
+                foreach ($src['calendars'] as $calId) {
+                    $calendars[] = [
+                        'id' => $calId,
+                        'name' => ($calId === 'primary') ? 'Hauptkalender' : $calId,
+                        'color' => ($src['type'] === 'google') ? '#4285f4' : '#2563eb',
+                    ];
+                }
+            }
         }
         $sources[] = [
             'id' => $src['id'],
@@ -217,9 +227,13 @@ function fetchGoogleEvents(string $accessToken, string $timezone, string $start,
         $calendarId = 'primary';
     }
 
+    // Google Calendar API erfordert RFC3339 mit Timezone-Offset
+    $startRfc = toRfc3339($start, $timezone);
+    $endRfc = toRfc3339($end, $timezone);
+
     $params = http_build_query([
-        'timeMin' => $start,
-        'timeMax' => $end,
+        'timeMin' => $startRfc,
+        'timeMax' => $endRfc,
         'singleEvents' => 'true',
         'orderBy' => 'startTime',
         'timeZone' => $timezone,
@@ -345,14 +359,21 @@ function graphGet(string $url, string $accessToken, string $timezone): array
     ]);
 
     $response = curl_exec($ch);
+    if ($response === false) {
+        SecurityHelper::logError('Calendar View', 'Graph GET error: ' . curl_error($ch));
+        curl_close($ch);
+        return [];
+    }
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($response === false || $httpCode >= 400) {
+    $decoded = json_decode($response, true) ?: [];
+    if ($httpCode >= 400) {
+        SecurityHelper::logError('Calendar View', "Graph GET HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
         return [];
     }
 
-    return json_decode($response, true) ?: [];
+    return $decoded;
 }
 
 function apiGet(string $url, string $accessToken): array
@@ -368,14 +389,35 @@ function apiGet(string $url, string $accessToken): array
     ]);
 
     $response = curl_exec($ch);
+    if ($response === false) {
+        SecurityHelper::logError('Calendar API', 'GET error: ' . curl_error($ch));
+        curl_close($ch);
+        return [];
+    }
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($response === false || $httpCode >= 400) {
+    $decoded = json_decode($response, true) ?: [];
+    if ($httpCode >= 400) {
+        SecurityHelper::logError('Calendar API', "GET HTTP {$httpCode}: " . ($decoded['error']['message'] ?? $response));
         return [];
     }
 
-    return json_decode($response, true) ?: [];
+    return $decoded;
+}
+
+/**
+ * Konvertiert einen Datums-String (z.B. 2024-01-15T00:00:00) in RFC3339 mit Timezone-Offset.
+ * Google Calendar API erfordert dieses Format für timeMin/timeMax.
+ */
+function toRfc3339(string $dateStr, string $timezone): string
+{
+    try {
+        $dt = new \DateTime($dateStr, new \DateTimeZone($timezone));
+        return $dt->format(\DateTime::ATOM);
+    } catch (\Exception $e) {
+        return $dateStr;
+    }
 }
 
 /**
