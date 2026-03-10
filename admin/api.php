@@ -273,6 +273,34 @@ try {
             jsonResponse(['success' => true]);
             break;
 
+        // ==================== Echte Kalender-Listen abrufen ====================
+        case 'calendar-lists':
+            if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
+            $config = $cm->getAppConfig();
+            $tokenStore = new TokenStore($config['token_store']['path']);
+
+            // Kalenderlisten-Funktionen aus calendar/api.php laden
+            require_once __DIR__ . '/../calendar/api-functions.php';
+
+            $sourceLists = [];
+            foreach ($config['calendar_sources'] as $src) {
+                $connected = $tokenStore->has($src['id']);
+                $calendars = [];
+                if ($connected) {
+                    $timezone = $config['app']['timezone'] ?? 'Europe/Berlin';
+                    $calendars = calApiFetchCalendarList($src, $tokenStore, $timezone);
+                }
+                $sourceLists[] = [
+                    'id' => $src['id'],
+                    'type' => $src['type'],
+                    'label' => $src['label'] ?? $src['id'],
+                    'connected' => $connected,
+                    'calendars' => $calendars,
+                ];
+            }
+            jsonResponse(['sources' => $sourceLists]);
+            break;
+
         // ==================== Kalender-Verbindungsstatus ====================
         case 'calendar-status':
             if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
