@@ -124,14 +124,14 @@ $csrfToken = SecurityHelper::generateCsrfToken();
             </div>
             <div class="cal-toolbar-right">
                 <div class="cal-view-switcher">
-                    <button class="btn btn-view active" data-view="month">Monat</button>
-                    <button class="btn btn-view" data-view="week">Woche</button>
+                    <button class="btn btn-view" data-view="month">Monat</button>
+                    <button class="btn btn-view active" data-view="week">Woche</button>
                 </div>
             </div>
         </div>
 
         <!-- Monatsansicht -->
-        <div class="cal-month-view" id="monthView">
+        <div class="cal-month-view hidden" id="monthView">
             <div class="cal-month-header">
                 <div class="cal-month-weekday">Mo</div>
                 <div class="cal-month-weekday">Di</div>
@@ -145,7 +145,7 @@ $csrfToken = SecurityHelper::generateCsrfToken();
         </div>
 
         <!-- Wochenansicht -->
-        <div class="cal-week-view hidden" id="weekView">
+        <div class="cal-week-view" id="weekView">
             <div class="cal-week-header" id="weekHeader"></div>
             <div class="cal-week-body">
                 <div class="cal-week-times" id="weekTimes"></div>
