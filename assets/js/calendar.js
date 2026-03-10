@@ -616,7 +616,8 @@
     }
 
     function showEventPopup(ev) {
-        document.getElementById('popupTitle').textContent = ev.subject || '(Kein Titel)';
+        var title = window.CAL_CONFIG.showEventTitle ? (ev.subject || '(Kein Titel)') : 'Belegt';
+        document.getElementById('popupTitle').textContent = title;
 
         var timeStr = '';
         if (ev.isAllDay) {

@@ -177,6 +177,37 @@ class ConfigManager
     }
 
     /**
+     * Setzt das Kalenderansicht-Passwort.
+     */
+    public function setCalendarViewPassword(string $password): void
+    {
+        $calView = $this->config['calendar_view'] ?? [];
+        $calView['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+        $this->config['calendar_view'] = $calView;
+        $this->save();
+    }
+
+    /**
+     * Prüft das Kalenderansicht-Passwort.
+     */
+    public function verifyCalendarViewPassword(string $password): bool
+    {
+        $hash = $this->config['calendar_view']['password_hash'] ?? '';
+        if (empty($hash)) {
+            return false;
+        }
+        return password_verify($password, $hash);
+    }
+
+    /**
+     * Gibt true zurück wenn ein Kalenderansicht-Passwort konfiguriert ist.
+     */
+    public function hasCalendarViewPassword(): bool
+    {
+        return !empty($this->config['calendar_view']['password_hash']);
+    }
+
+    /**
      * Gibt die komplette Konfiguration als Array für die App zurück.
      * Inkl. berechneter Felder wie token_store path.
      */
@@ -289,6 +320,11 @@ class ConfigManager
                 'url' => '',
                 'secret' => '',
                 'headers' => [],
+            ],
+            'calendar_view' => [
+                'password_hash' => '',
+                'show_event_title' => true,
+                'visible_calendars' => [],
             ],
             'admin' => [
                 'password_hash' => '',

@@ -34,6 +34,11 @@ $timezone = $config['app']['timezone'] ?? 'Europe/Berlin';
 
 $action = $_GET['action'] ?? '';
 
+// Kalenderansicht-Einstellungen laden
+$calViewConfig = $config['calendar_view'] ?? [];
+$visibleCalendars = $calViewConfig['visible_calendars'] ?? [];
+$showEventTitle = $calViewConfig['show_event_title'] ?? true;
+
 if ($action === 'sources') {
     // Verfügbare Kalender-Quellen zurückgeben
     $sources = [];
@@ -53,6 +58,19 @@ if ($action === 'sources') {
                 }
             }
         }
+
+        // Kalender nach visible_calendars filtern
+        if (!empty($visibleCalendars)) {
+            $calendars = array_values(array_filter($calendars, function ($cal) use ($src, $visibleCalendars) {
+                $key = $src['id'] . ':' . $cal['id'];
+                return in_array($key, $visibleCalendars);
+            }));
+            // Quelle überspringen wenn keine sichtbaren Kalender
+            if (empty($calendars) && $connected) {
+                continue;
+            }
+        }
+
         $sources[] = [
             'id' => $src['id'],
             'type' => $src['type'],
@@ -92,6 +110,15 @@ if ($action === 'events') {
     }
 
     $events = fetchEvents($source, $tokenStore, $timezone, $start, $end, $calendarId);
+
+    // Titel ausblenden wenn konfiguriert
+    if (!$showEventTitle) {
+        foreach ($events as &$ev) {
+            $ev['subject'] = 'Belegt';
+        }
+        unset($ev);
+    }
+
     echo json_encode(['events' => $events]);
     exit;
 }

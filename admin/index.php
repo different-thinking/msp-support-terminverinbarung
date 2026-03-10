@@ -174,6 +174,9 @@ foreach ($config['calendar_sources'] as $src) {
             <a href="#" class="nav-item" data-tab="embed">
                 <span class="nav-icon">&#128444;</span> Einbetten
             </a>
+            <a href="#" class="nav-item" data-tab="calendar-view">
+                <span class="nav-icon">&#128197;</span> Kalenderansicht
+            </a>
             <a href="#" class="nav-item" data-tab="access">
                 <span class="nav-icon">&#128274;</span> Zugang
             </a>
@@ -188,6 +191,9 @@ foreach ($config['calendar_sources'] as $src) {
         <div class="sidebar-footer">
             <a href="../" class="nav-item" target="_blank">
                 <span class="nav-icon">&#8599;</span> Buchungsseite
+            </a>
+            <a href="../calendar/" class="nav-item" target="_blank">
+                <span class="nav-icon">&#128197;</span> Kalenderansicht
             </a>
             <?php if ($cm->hasAdminPassword()): ?>
             <a href="?logout=1" class="nav-item">
@@ -915,6 +921,72 @@ foreach ($config['calendar_sources'] as $src) {
                     <?php endif; ?>
                 </div>
             </div>
+        </section>
+
+        <!-- ==================== Tab: Kalenderansicht ==================== -->
+        <section id="tab-calendar-view" class="tab-content">
+            <div class="tab-header">
+                <h1>Kalenderansicht</h1>
+                <p>Einstellungen für die passwortgeschützte Kalenderansicht</p>
+            </div>
+
+            <form id="form-calendar-view" class="admin-card">
+                <h3 class="card-section-title">Zugangspasswort</h3>
+                <p style="margin-bottom:12px;color:var(--gray-500);font-size:14px;">
+                    Separates Passwort für die Kalenderansicht. Falls nicht gesetzt, wird das Admin-Passwort verwendet.
+                </p>
+                <div class="form-group">
+                    <div id="calview-pw-status" style="margin-bottom:8px;">
+                        <?php if ($cm->hasCalendarViewPassword()): ?>
+                            <span style="color:var(--success);font-weight:500;">&#10003; Eigenes Passwort gesetzt</span>
+                        <?php else: ?>
+                            <span style="color:var(--gray-400);">Kein eigenes Passwort – Admin-Passwort wird verwendet</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="calview-new-password">Neues Passwort</label>
+                            <input type="password" id="calview-new-password" minlength="12" placeholder="Mindestens 12 Zeichen">
+                        </div>
+                        <div class="form-group">
+                            <label for="calview-confirm-password">Passwort bestätigen</label>
+                            <input type="password" id="calview-confirm-password" placeholder="Passwort wiederholen">
+                        </div>
+                    </div>
+                    <?php if ($cm->hasCalendarViewPassword()): ?>
+                    <label class="checkbox-label" style="margin-top:4px;">
+                        <input type="checkbox" id="calview-remove-password">
+                        <span>Eigenes Passwort entfernen (Admin-Passwort verwenden)</span>
+                    </label>
+                    <?php endif; ?>
+                </div>
+
+                <hr style="border:none;border-top:1px solid var(--gray-100);margin:20px 0;">
+
+                <h3 class="card-section-title">Sichtbare Kalender</h3>
+                <p style="margin-bottom:12px;color:var(--gray-500);font-size:14px;">
+                    Wählen Sie, welche Kalender in der Kalenderansicht angezeigt werden sollen. Wenn keiner ausgewählt ist, werden alle angezeigt.
+                </p>
+                <div id="calview-calendars-list">
+                    <div class="cal-loading">Lade Kalender...</div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid var(--gray-100);margin:20px 0;">
+
+                <h3 class="card-section-title">Anzeige</h3>
+                <?php $calViewConfig = $cm->getSection('calendar_view') ?: []; ?>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="calview-show-title" <?= !empty($calViewConfig['show_event_title'] ?? true) ? 'checked' : '' ?>>
+                    <span>Titel der Termine anzeigen</span>
+                </label>
+                <p style="margin-top:4px;color:var(--gray-500);font-size:14px;">
+                    Wenn deaktiviert, wird anstelle des Titels nur "Belegt" angezeigt.
+                </p>
+
+                <div class="form-actions" style="margin-top:20px;">
+                    <button type="submit" class="btn btn-primary">Einstellungen speichern</button>
+                </div>
+            </form>
         </section>
 
         <!-- ==================== Tab: Zugang ==================== -->
