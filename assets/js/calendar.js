@@ -805,11 +805,26 @@
         }
     }
 
-    // ==================== Mobile Drawer ====================
+    // ==================== Mobile Hamburger ====================
 
     function bindMobilePanel() {
-        // <details>/<summary> braucht kein JS für open/close
-        // Funktion bleibt als Hook für zukünftige Erweiterungen
+        var btn = document.getElementById('btnHamburger');
+        var sidebar = document.querySelector('.cal-sidebar');
+        if (!btn || !sidebar) return;
+
+        btn.addEventListener('click', function () {
+            sidebar.classList.toggle('mobile-open');
+        });
+
+        // Tap außerhalb der Sidebar schließt sie
+        document.addEventListener('click', function (e) {
+            if (sidebar.classList.contains('mobile-open')
+                && !sidebar.contains(e.target)
+                && e.target !== btn
+                && !btn.contains(e.target)) {
+                sidebar.classList.remove('mobile-open');
+            }
+        });
     }
 
     function renderMobileMiniCalendar() {
