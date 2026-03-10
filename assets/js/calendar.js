@@ -10,7 +10,7 @@
 
     // ==================== State ====================
     const state = {
-        view: 'month', // 'month' | 'week'
+        view: 'week', // 'month' | 'week'
         currentDate: new Date(),
         miniDate: null, // Tracks mini-calendar independently if needed
         sources: [],     // [{id, type, connected, calendars: [{id, name, color}]}]
@@ -57,6 +57,7 @@
                 });
             });
 
+            restoreCalendarSelection();
             renderSourcesSidebar();
             renderMiniCalendar();
             loadEvents();
@@ -170,6 +171,13 @@
     var DAY_NAMES = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
     var FULL_DAY_NAMES = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
 
+    function getISOWeekNumber(date) {
+        var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    }
+
     // ==================== Toolbar ====================
 
     function bindToolbar() {
@@ -254,6 +262,7 @@
                 checkbox.checked = calData.checked;
                 checkbox.addEventListener('change', function () {
                     calData.checked = this.checked;
+                    saveCalendarSelection();
                     loadEvents();
                 });
 
@@ -369,11 +378,13 @@
             title.textContent = MONTH_NAMES[state.currentDate.getMonth()] + ' ' + state.currentDate.getFullYear();
         } else {
             var range = getWeekRange();
+            var kw = getISOWeekNumber(range.start);
+            var kwPrefix = 'KW ' + kw + ' · ';
             if (range.start.getMonth() === range.end.getMonth()) {
-                title.textContent = range.start.getDate() + '. – ' + range.end.getDate() + '. ' +
+                title.textContent = kwPrefix + range.start.getDate() + '. – ' + range.end.getDate() + '. ' +
                     MONTH_NAMES[range.start.getMonth()] + ' ' + range.start.getFullYear();
             } else {
-                title.textContent = range.start.getDate() + '. ' + SHORT_MONTHS[range.start.getMonth()] + ' – ' +
+                title.textContent = kwPrefix + range.start.getDate() + '. ' + SHORT_MONTHS[range.start.getMonth()] + ' – ' +
                     range.end.getDate() + '. ' + SHORT_MONTHS[range.end.getMonth()] + ' ' + range.end.getFullYear();
             }
         }
@@ -664,6 +675,33 @@
 
     function closePopup() {
         document.getElementById('eventPopupOverlay').classList.add('hidden');
+    }
+
+    // ==================== Calendar Selection Persistence ====================
+
+    var STORAGE_KEY = 'cal_selected_calendars';
+
+    function saveCalendarSelection() {
+        var selection = {};
+        state.selectedCalendars.forEach(function (cal, key) {
+            selection[key] = cal.checked;
+        });
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
+        } catch (e) { /* ignore */ }
+    }
+
+    function restoreCalendarSelection() {
+        try {
+            var saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+            var selection = JSON.parse(saved);
+            state.selectedCalendars.forEach(function (cal, key) {
+                if (key in selection) {
+                    cal.checked = selection[key];
+                }
+            });
+        } catch (e) { /* ignore */ }
     }
 
     // ==================== Utility ====================
