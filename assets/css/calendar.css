@@ -813,7 +813,7 @@ body {
     .cal-app { flex-direction: column; }
 
     /* Sidebar auf Mobile verstecken – wird über Bottom-Panel zugänglich */
-    .cal-sidebar { display: none; }
+    .cal-sidebar { display: none !important; }
 
     .cal-main {
         flex: 1;
