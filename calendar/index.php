@@ -117,6 +117,7 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     <main class="cal-main">
         <div class="cal-toolbar">
             <div class="cal-toolbar-left">
+                <button class="btn btn-hamburger" id="btnHamburger" type="button">&#9776;</button>
                 <button class="btn btn-today" id="btnToday">Heute</button>
                 <button class="btn btn-nav" id="btnPrev">&#9664;</button>
                 <button class="btn btn-nav" id="btnNext">&#9654;</button>
@@ -157,21 +158,6 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     </main>
 </div>
 
-<!-- Mobile: Aufklappbare Kalender-Leiste (kein JS nötig) -->
-<details class="mobile-drawer" id="mobileDrawer">
-    <summary class="mobile-drawer-toggle">
-        <span class="mobile-bottom-icon">&#128197;</span>
-        <span class="mobile-bottom-label">Kalender</span>
-        <span class="mobile-bottom-chevron">&#9650;</span>
-    </summary>
-    <div class="mobile-drawer-content">
-        <div class="mini-calendar" id="miniCalendarMobile"></div>
-        <div class="cal-sources">
-            <h3>Kalender</h3>
-            <div class="cal-sources-list" id="calSourcesListMobile"></div>
-        </div>
-    </div>
-</details>
 
 <!-- Event-Detail-Popup -->
 <div class="cal-popup-overlay hidden" id="eventPopupOverlay">
