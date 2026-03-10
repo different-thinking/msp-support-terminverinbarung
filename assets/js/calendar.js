@@ -10,7 +10,7 @@
 
     // ==================== State ====================
     const state = {
-        view: 'week', // 'month' | 'week'
+        view: 'week', // 'month' | 'week' | 'day' | '3day'
         currentDate: new Date(),
         miniDate: null, // Tracks mini-calendar independently if needed
         sources: [],     // [{id, type, connected, calendars: [{id, name, color}]}]
@@ -22,10 +22,23 @@
     // ==================== Init ====================
     document.addEventListener('DOMContentLoaded', init);
 
+    function isMobile() { return window.innerWidth <= 768; }
+
     function init() {
         state.miniDate = new Date(state.currentDate);
+        // Auf Mobile standardmäßig 3-Tage-Ansicht
+        if (isMobile()) {
+            state.view = '3day';
+        }
         bindToolbar();
         bindPopup();
+        // Buttons korrekt initialisieren
+        document.querySelectorAll('.btn-view').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.view === state.view);
+        });
+        var isTimeGrid = (state.view !== 'month');
+        document.getElementById('monthView').classList.toggle('hidden', state.view !== 'month');
+        document.getElementById('weekView').classList.toggle('hidden', !isTimeGrid);
         loadSources();
     }
 
@@ -114,11 +127,9 @@
         if (state.view === 'month') {
             var y = state.currentDate.getFullYear();
             var m = state.currentDate.getMonth();
-            // Erster Montag der Monatsansicht
             var first = new Date(y, m, 1);
             var startDay = (first.getDay() + 6) % 7; // Mo=0
             var viewStart = new Date(y, m, 1 - startDay);
-            // Letzter Sonntag
             var last = new Date(y, m + 1, 0);
             var endDay = (last.getDay() + 6) % 7;
             var viewEnd = new Date(y, m + 1, 0 + (6 - endDay));
@@ -126,6 +137,25 @@
             return {
                 start: formatDateTimeISO(viewStart),
                 end: formatDateTimeISO(viewEnd),
+            };
+        } else if (state.view === 'day') {
+            var d = new Date(state.currentDate);
+            d.setHours(0, 0, 0, 0);
+            var end = new Date(d);
+            end.setHours(23, 59, 59);
+            return {
+                start: formatDateTimeISO(d),
+                end: formatDateTimeISO(end),
+            };
+        } else if (state.view === '3day') {
+            var d = new Date(state.currentDate);
+            d.setHours(0, 0, 0, 0);
+            var end = new Date(d);
+            end.setDate(d.getDate() + 2);
+            end.setHours(23, 59, 59);
+            return {
+                start: formatDateTimeISO(d),
+                end: formatDateTimeISO(end),
             };
         } else {
             // Woche: Mo - So
@@ -206,6 +236,10 @@
     function navigate(dir) {
         if (state.view === 'month') {
             state.currentDate.setMonth(state.currentDate.getMonth() + dir);
+        } else if (state.view === 'day') {
+            state.currentDate.setDate(state.currentDate.getDate() + dir);
+        } else if (state.view === '3day') {
+            state.currentDate.setDate(state.currentDate.getDate() + (dir * 3));
         } else {
             state.currentDate.setDate(state.currentDate.getDate() + (dir * 7));
         }
@@ -219,8 +253,9 @@
         document.querySelectorAll('.btn-view').forEach(function (b) {
             b.classList.toggle('active', b.dataset.view === view);
         });
+        var isTimeGrid = (view === 'week' || view === 'day' || view === '3day');
         document.getElementById('monthView').classList.toggle('hidden', view !== 'month');
-        document.getElementById('weekView').classList.toggle('hidden', view !== 'week');
+        document.getElementById('weekView').classList.toggle('hidden', !isTimeGrid);
         loadEvents();
     }
 
@@ -367,6 +402,10 @@
         updateTitle();
         if (state.view === 'month') {
             renderMonthView();
+        } else if (state.view === 'day') {
+            renderDayGridView(1);
+        } else if (state.view === '3day') {
+            renderDayGridView(3);
         } else {
             renderWeekView();
         }
@@ -376,6 +415,22 @@
         var title = document.getElementById('calTitle');
         if (state.view === 'month') {
             title.textContent = MONTH_NAMES[state.currentDate.getMonth()] + ' ' + state.currentDate.getFullYear();
+        } else if (state.view === 'day') {
+            var d = state.currentDate;
+            var dow = (d.getDay() + 6) % 7;
+            title.textContent = FULL_DAY_NAMES[dow] + ', ' + d.getDate() + '. ' +
+                MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
+        } else if (state.view === '3day') {
+            var startD = new Date(state.currentDate);
+            var endD = new Date(state.currentDate);
+            endD.setDate(endD.getDate() + 2);
+            if (startD.getMonth() === endD.getMonth()) {
+                title.textContent = startD.getDate() + '. – ' + endD.getDate() + '. ' +
+                    MONTH_NAMES[startD.getMonth()] + ' ' + startD.getFullYear();
+            } else {
+                title.textContent = startD.getDate() + '. ' + SHORT_MONTHS[startD.getMonth()] + ' – ' +
+                    endD.getDate() + '. ' + SHORT_MONTHS[endD.getMonth()] + ' ' + endD.getFullYear();
+            }
         } else {
             var range = getWeekRange();
             var kw = getISOWeekNumber(range.start);
@@ -512,6 +567,9 @@
     // ==================== Week View ====================
 
     function renderWeekView() {
+        var weekView = document.getElementById('weekView');
+        weekView.setAttribute('data-cols', '7');
+
         var range = getWeekRange();
         var monday = range.start;
 
@@ -632,6 +690,112 @@
                 body.scrollLeft = scrollTarget;
                 weekHeader.scrollLeft = scrollTarget;
             }
+        }
+    }
+
+    // ==================== Day/3-Day Grid View (Mobile) ====================
+
+    function renderDayGridView(numDays) {
+        var weekView = document.getElementById('weekView');
+        weekView.setAttribute('data-cols', numDays);
+
+        var startDate = new Date(state.currentDate);
+
+        // Header
+        var header = document.getElementById('weekHeader');
+        header.innerHTML = '<div class="cal-week-header-spacer"></div>';
+        for (var i = 0; i < numDays; i++) {
+            var d = new Date(startDate);
+            d.setDate(startDate.getDate() + i);
+            var dow = (d.getDay() + 6) % 7;
+            var dayEl = document.createElement('div');
+            dayEl.className = 'cal-week-header-day';
+            if (isToday(d)) dayEl.classList.add('today');
+            dayEl.innerHTML = '<div class="cal-week-day-name">' + DAY_NAMES[dow] + '</div>' +
+                '<div class="cal-week-day-number">' + d.getDate() + '</div>';
+            header.appendChild(dayEl);
+        }
+
+        // Times
+        var times = document.getElementById('weekTimes');
+        times.innerHTML = '';
+        for (var h = 0; h < 24; h++) {
+            var timeEl = document.createElement('div');
+            timeEl.className = 'cal-week-time';
+            timeEl.textContent = pad(h) + ':00';
+            times.appendChild(timeEl);
+        }
+
+        // Columns
+        var columns = document.getElementById('weekColumns');
+        columns.innerHTML = '';
+
+        for (var i = 0; i < numDays; i++) {
+            var col = document.createElement('div');
+            col.className = 'cal-week-column';
+
+            for (var h = 0; h < 24; h++) {
+                var line = document.createElement('div');
+                line.className = 'cal-week-hour-line';
+                col.appendChild(line);
+            }
+
+            var dayDate = new Date(startDate);
+            dayDate.setDate(startDate.getDate() + i);
+
+            var dayEvents = state.events.filter(function (ev) {
+                if (ev.isAllDay) return false;
+                var evDate = new Date(ev.start);
+                return isSameDay(evDate, dayDate);
+            });
+
+            dayEvents.forEach(function (ev) {
+                var evStart = new Date(ev.start);
+                var evEnd = new Date(ev.end);
+
+                var startMinutes = evStart.getHours() * 60 + evStart.getMinutes();
+                var endMinutes = evEnd.getHours() * 60 + evEnd.getMinutes();
+                if (endMinutes <= startMinutes) endMinutes = startMinutes + 30;
+
+                var top = (startMinutes / 60) * 48;
+                var height = ((endMinutes - startMinutes) / 60) * 48;
+                if (height < 18) height = 18;
+
+                var evEl = document.createElement('div');
+                evEl.className = 'cal-week-event';
+                evEl.style.top = top + 'px';
+                evEl.style.height = height + 'px';
+                evEl.style.backgroundColor = ev._color || 'var(--primary)';
+
+                evEl.innerHTML = '<div class="cal-week-event-title">' + escapeHtml(ev.subject) + '</div>' +
+                    '<div class="cal-week-event-time">' + formatTime(ev.start) + ' – ' + formatTime(ev.end) + '</div>';
+
+                evEl.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    showEventPopup(ev);
+                });
+
+                col.appendChild(evEl);
+            });
+
+            // Now line
+            if (isToday(dayDate)) {
+                var now = new Date();
+                var nowMinutes = now.getHours() * 60 + now.getMinutes();
+                var nowTop = (nowMinutes / 60) * 48;
+                var nowLine = document.createElement('div');
+                nowLine.className = 'cal-now-line';
+                nowLine.style.top = nowTop + 'px';
+                col.appendChild(nowLine);
+            }
+
+            columns.appendChild(col);
+        }
+
+        // Scroll to 8:00
+        var body = document.querySelector('.cal-week-body');
+        if (body) {
+            body.scrollTop = 8 * 48;
         }
     }
 

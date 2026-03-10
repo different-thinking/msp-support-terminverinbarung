@@ -124,8 +124,10 @@ $csrfToken = SecurityHelper::generateCsrfToken();
             </div>
             <div class="cal-toolbar-right">
                 <div class="cal-view-switcher">
-                    <button class="btn btn-view" data-view="month">Monat</button>
+                    <button class="btn btn-view btn-view-mobile" data-view="day">Tag</button>
+                    <button class="btn btn-view btn-view-mobile" data-view="3day">3 Tage</button>
                     <button class="btn btn-view active" data-view="week">Woche</button>
+                    <button class="btn btn-view" data-view="month">Monat</button>
                 </div>
             </div>
         </div>

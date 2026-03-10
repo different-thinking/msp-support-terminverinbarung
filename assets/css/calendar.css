@@ -800,20 +800,29 @@ body {
     text-align: center;
 }
 
+/* Mobile-only view buttons (hidden on desktop) */
+.btn-view-mobile { display: none; }
+
 /* ==================== Responsive ==================== */
 @media (max-width: 768px) {
     .cal-app { flex-direction: column; }
 
+    /* Sidebar unter den Kalender verschieben */
     .cal-sidebar {
         width: 100%;
         border-right: none;
-        border-bottom: 1px solid var(--gray-200);
-        max-height: 50vh;
+        border-top: 1px solid var(--gray-200);
+        border-bottom: none;
+        order: 2;
+        max-height: none;
+    }
+
+    .cal-main {
+        order: 1;
+        min-height: 70vh;
     }
 
     body { overflow: auto; height: auto; }
-
-    .cal-main { min-height: 70vh; }
 
     .cal-toolbar {
         flex-direction: column;
@@ -823,21 +832,23 @@ body {
 
     .cal-title { font-size: 16px; margin-left: 4px; }
 
-    /* Mobile Wochenansicht – 3-Tage-Ansicht mit horizontalem Scrollen */
+    /* Mobile view buttons anzeigen */
+    .btn-view-mobile { display: inline-flex; }
+
+    /* Mobile Wochenansicht – scrollbar */
     .cal-week-view {
         display: flex;
         overflow: hidden;
     }
 
     .cal-week-header {
-        display: grid;
-        grid-template-columns: 44px repeat(7, minmax(120px, 1fr));
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
 
     .cal-week-header-spacer {
         width: 44px;
+        min-width: 44px;
         position: sticky;
         left: 0;
         background: white;
@@ -876,14 +887,6 @@ body {
         padding: 0 4px;
     }
 
-    .cal-week-columns {
-        grid-template-columns: repeat(7, minmax(120px, 1fr));
-    }
-
-    .cal-week-column {
-        min-width: 120px;
-    }
-
     .cal-week-event {
         font-size: 10px;
     }
@@ -903,5 +906,53 @@ body {
         z-index: 2;
         font-size: 9px;
         padding: 4px 4px;
+    }
+
+    /* Tagesansicht: eine breite Spalte */
+    .cal-week-view[data-cols="1"] .cal-week-header {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+    }
+    .cal-week-view[data-cols="1"] .cal-week-columns {
+        grid-template-columns: 1fr;
+    }
+    .cal-week-view[data-cols="1"] .cal-week-column {
+        min-width: 0;
+    }
+    .cal-week-view[data-cols="1"] .cal-week-header-day {
+        min-width: 0;
+    }
+    .cal-week-view[data-cols="1"] .cal-week-allday-row {
+        grid-template-columns: 44px 1fr;
+    }
+
+    /* 3-Tage-Ansicht */
+    .cal-week-view[data-cols="3"] .cal-week-header {
+        display: grid;
+        grid-template-columns: 44px repeat(3, 1fr);
+    }
+    .cal-week-view[data-cols="3"] .cal-week-columns {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .cal-week-view[data-cols="3"] .cal-week-column {
+        min-width: 0;
+    }
+    .cal-week-view[data-cols="3"] .cal-week-header-day {
+        min-width: 0;
+    }
+    .cal-week-view[data-cols="3"] .cal-week-allday-row {
+        grid-template-columns: 44px repeat(3, 1fr);
+    }
+
+    /* 7-Tage-Wochenansicht auf Mobile */
+    .cal-week-view[data-cols="7"] .cal-week-header {
+        display: grid;
+        grid-template-columns: 44px repeat(7, minmax(120px, 1fr));
+    }
+    .cal-week-view[data-cols="7"] .cal-week-columns {
+        grid-template-columns: repeat(7, minmax(120px, 1fr));
+    }
+    .cal-week-view[data-cols="7"] .cal-week-column {
+        min-width: 120px;
     }
 }
