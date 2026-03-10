@@ -32,7 +32,7 @@
         }
         bindToolbar();
         bindPopup();
-        if (isMobile()) bindMobilePanel();
+        bindMobilePanel(); // bindet nur wenn Elemente vorhanden (guard im Funktionskopf)
         // Buttons korrekt initialisieren
         document.querySelectorAll('.btn-view').forEach(function (b) {
             b.classList.toggle('active', b.dataset.view === state.view);
@@ -812,8 +812,12 @@
         var panel = document.getElementById('mobilePanel');
         var overlay = document.getElementById('mobilePanelOverlay');
         var bar = document.getElementById('mobileBottomBar');
+        if (!toggle || !panel || !overlay || !bar) return;
+
+        var isOpen = false;
 
         function openPanel() {
+            isOpen = true;
             panel.classList.add('open');
             overlay.classList.remove('hidden');
             overlay.classList.add('visible');
@@ -821,6 +825,7 @@
         }
 
         function closePanel() {
+            isOpen = false;
             panel.classList.remove('open');
             overlay.classList.remove('visible');
             bar.classList.remove('open');
@@ -831,15 +836,33 @@
             }, 300);
         }
 
-        toggle.addEventListener('click', function () {
-            if (panel.classList.contains('open')) {
-                closePanel();
-            } else {
-                openPanel();
-            }
+        function togglePanel() {
+            if (isOpen) { closePanel(); } else { openPanel(); }
+        }
+
+        // Tap auf Toggle-Button
+        toggle.addEventListener('click', togglePanel);
+
+        // Tap auf Overlay schließt Panel
+        overlay.addEventListener('click', closePanel);
+
+        // Swipe-up auf Bottom-Bar öffnet, Swipe-down auf Panel schließt
+        var touchStartY = 0;
+        bar.addEventListener('touchstart', function (e) {
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        bar.addEventListener('touchend', function (e) {
+            var diff = touchStartY - e.changedTouches[0].clientY;
+            if (diff > 30 && !isOpen) openPanel();
         });
 
-        overlay.addEventListener('click', closePanel);
+        panel.addEventListener('touchstart', function (e) {
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        panel.addEventListener('touchend', function (e) {
+            var diff = e.changedTouches[0].clientY - touchStartY;
+            if (diff > 50 && isOpen) closePanel();
+        });
     }
 
     function renderMobileMiniCalendar() {
