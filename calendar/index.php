@@ -68,7 +68,7 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kalender – <?= $appName ?></title>
-    <link rel="stylesheet" href="../assets/css/calendar.css">
+    <link rel="stylesheet" href="../assets/css/calendar.css?v=<?= filemtime(__DIR__ . '/../assets/css/calendar.css') ?>">
 </head>
 <body>
 
@@ -205,7 +205,7 @@ $csrfToken = SecurityHelper::generateCsrfToken();
         showEventTitle: <?= !empty($calViewConfig['show_event_title'] ?? true) ? 'true' : 'false' ?>
     };
 </script>
-<script src="../assets/js/calendar.js"></script>
+<script src="../assets/js/calendar.js?v=<?= filemtime(__DIR__ . '/../assets/js/calendar.js') ?>"></script>
 <?php endif; ?>
 </body>
 </html>
