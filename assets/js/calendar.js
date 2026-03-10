@@ -612,6 +612,27 @@
         if (body) {
             body.scrollTop = 8 * 48;
         }
+
+        // Mobile: synchronisiere Header-Scroll mit Body-Scroll
+        if (window.innerWidth <= 768) {
+            var weekHeader = document.getElementById('weekHeader');
+            body.addEventListener('scroll', function () {
+                weekHeader.scrollLeft = body.scrollLeft;
+            });
+
+            // Scrolle zum heutigen Tag
+            var todayIdx = -1;
+            for (var ti = 0; ti < 7; ti++) {
+                var td = new Date(monday);
+                td.setDate(monday.getDate() + ti);
+                if (isToday(td)) { todayIdx = ti; break; }
+            }
+            if (todayIdx > 0) {
+                var scrollTarget = todayIdx * 120;
+                body.scrollLeft = scrollTarget;
+                weekHeader.scrollLeft = scrollTarget;
+            }
+        }
     }
 
     // ==================== Event Popup ====================

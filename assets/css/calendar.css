@@ -823,6 +823,85 @@ body {
 
     .cal-title { font-size: 16px; margin-left: 4px; }
 
-    .cal-week-view { display: none; }
-    .btn-view[data-view="week"] { display: none; }
+    /* Mobile Wochenansicht – 3-Tage-Ansicht mit horizontalem Scrollen */
+    .cal-week-view {
+        display: flex;
+        overflow: hidden;
+    }
+
+    .cal-week-header {
+        display: grid;
+        grid-template-columns: 44px repeat(7, minmax(120px, 1fr));
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .cal-week-header-spacer {
+        width: 44px;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 2;
+    }
+
+    .cal-week-header-day {
+        min-width: 120px;
+        padding: 6px 2px;
+    }
+
+    .cal-week-day-name { font-size: 10px; }
+    .cal-week-day-number { font-size: 16px; }
+
+    .cal-week-header-day.today .cal-week-day-number {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .cal-week-body {
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .cal-week-times {
+        width: 44px;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 2;
+    }
+
+    .cal-week-time {
+        font-size: 9px;
+        padding: 0 4px;
+    }
+
+    .cal-week-columns {
+        grid-template-columns: repeat(7, minmax(120px, 1fr));
+    }
+
+    .cal-week-column {
+        min-width: 120px;
+    }
+
+    .cal-week-event {
+        font-size: 10px;
+    }
+
+    .cal-week-event-title { font-size: 10px; }
+    .cal-week-event-time { font-size: 9px; }
+
+    .cal-week-allday-row {
+        grid-template-columns: 44px repeat(7, minmax(120px, 1fr));
+    }
+
+    .cal-week-allday-label {
+        width: 44px;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 2;
+        font-size: 9px;
+        padding: 4px 4px;
+    }
 }
