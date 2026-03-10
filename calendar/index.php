@@ -157,31 +157,21 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     </main>
 </div>
 
-<!-- Mobile Bottom-Bar + Fullscreen-Panel -->
-<div class="mobile-bottom-bar" id="mobileBottomBar">
-    <button class="mobile-bottom-toggle" id="mobileBottomToggle" type="button"
-            onclick="var p=document.getElementById('mobilePanel'); p.style.display=p.style.display==='flex'?'none':'flex';">
+<!-- Mobile: Aufklappbare Kalender-Leiste (kein JS nötig) -->
+<details class="mobile-drawer" id="mobileDrawer">
+    <summary class="mobile-drawer-toggle">
         <span class="mobile-bottom-icon">&#128197;</span>
         <span class="mobile-bottom-label">Kalender</span>
-        <span class="mobile-bottom-chevron" id="mobileChevron">&#9650;</span>
-    </button>
-    <a href="?logout" class="mobile-bottom-logout" title="Abmelden">&#x2716;</a>
-</div>
-
-<div class="mobile-panel" id="mobilePanel">
-    <div class="mobile-panel-header">
-        <h3>Kalender</h3>
-        <button type="button" class="btn-close"
-                onclick="document.getElementById('mobilePanel').style.display='none';">&#x2716;</button>
-    </div>
-    <div class="mobile-panel-content">
+        <span class="mobile-bottom-chevron">&#9650;</span>
+    </summary>
+    <div class="mobile-drawer-content">
         <div class="mini-calendar" id="miniCalendarMobile"></div>
         <div class="cal-sources">
             <h3>Kalender</h3>
             <div class="cal-sources-list" id="calSourcesListMobile"></div>
         </div>
     </div>
-</div>
+</details>
 
 <!-- Event-Detail-Popup -->
 <div class="cal-popup-overlay hidden" id="eventPopupOverlay">
