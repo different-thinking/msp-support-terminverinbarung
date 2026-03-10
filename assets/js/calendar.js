@@ -805,17 +805,11 @@
         }
     }
 
-    // ==================== Mobile Panel ====================
+    // ==================== Mobile Drawer ====================
 
     function bindMobilePanel() {
-        var toggle = document.getElementById('mobileBottomToggle');
-        var panel = document.getElementById('mobilePanel');
-        if (!toggle || !panel) return;
-
-        toggle.addEventListener('click', function () {
-            var visible = panel.style.display === 'flex';
-            panel.style.display = visible ? 'none' : 'flex';
-        });
+        // <details>/<summary> braucht kein JS für open/close
+        // Funktion bleibt als Hook für zukünftige Erweiterungen
     }
 
     function renderMobileMiniCalendar() {
