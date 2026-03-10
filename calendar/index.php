@@ -25,11 +25,20 @@ $config = $cm->getAppConfig();
 $authenticated = false;
 $authError = '';
 
-if ($cm->hasAdminPassword()) {
+$hasCalViewPw = $cm->hasCalendarViewPassword();
+$hasAdminPw = $cm->hasAdminPassword();
+
+if ($hasCalViewPw || $hasAdminPw) {
     if (isset($_SESSION['calendar_auth']) && $_SESSION['calendar_auth'] === true) {
         $authenticated = true;
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
-        if ($cm->verifyAdminPassword($_POST['password'])) {
+        $passwordValid = false;
+        if ($hasCalViewPw) {
+            $passwordValid = $cm->verifyCalendarViewPassword($_POST['password']);
+        } else {
+            $passwordValid = $cm->verifyAdminPassword($_POST['password']);
+        }
+        if ($passwordValid) {
             session_regenerate_id(true);
             $_SESSION['calendar_auth'] = true;
             $authenticated = true;
@@ -38,7 +47,7 @@ if ($cm->hasAdminPassword()) {
         }
     }
 } else {
-    // Kein Admin-Passwort konfiguriert
+    // Kein Passwort konfiguriert
     $authError = 'Kein Passwort konfiguriert. Bitte zuerst im Admin-Bereich ein Passwort setzen.';
 }
 
@@ -72,7 +81,7 @@ $csrfToken = SecurityHelper::generateCsrfToken();
         <?php if ($authError): ?>
             <div class="alert alert-error"><?= htmlspecialchars($authError) ?></div>
         <?php endif; ?>
-        <?php if ($cm->hasAdminPassword()): ?>
+        <?php if ($hasCalViewPw || $hasAdminPw): ?>
         <form method="POST">
             <div class="form-group">
                 <input type="password" name="password" placeholder="Passwort eingeben" required autofocus>
@@ -162,10 +171,12 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     </div>
 </div>
 
+<?php $calViewConfig = $cm->getSection('calendar_view') ?: []; ?>
 <script>
     window.CAL_CONFIG = {
         timezone: '<?= $timezone ?>',
-        apiBase: 'api.php'
+        apiBase: 'api.php',
+        showEventTitle: <?= !empty($calViewConfig['show_event_title'] ?? true) ? 'true' : 'false' ?>
     };
 </script>
 <script src="../assets/js/calendar.js"></script>

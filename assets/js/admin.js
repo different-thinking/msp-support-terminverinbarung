@@ -498,6 +498,126 @@
         }).catch(() => { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
     });
 
+    // ==================== Form: Kalenderansicht ====================
+
+    // Kalender-Liste für die Kalenderansicht laden
+    (function loadCalendarViewCalendars() {
+        var container = document.getElementById('calview-calendars-list');
+        if (!container) return;
+
+        fetch(API + '?action=config')
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var config = res.config || {};
+                var sources = config.calendar_sources || [];
+                var calView = config.calendar_view || {};
+                var visibleCalendars = calView.visible_calendars || [];
+
+                if (sources.length === 0) {
+                    container.innerHTML = '<div style="color:var(--gray-400);font-size:14px;">Keine Kalender-Quellen konfiguriert.</div>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                sources.forEach(function (src) {
+                    var group = document.createElement('div');
+                    group.style.marginBottom = '12px';
+
+                    var label = document.createElement('div');
+                    label.style.cssText = 'font-weight:600;font-size:14px;margin-bottom:6px;';
+                    label.textContent = src.label || src.id;
+                    var typeTag = document.createElement('span');
+                    typeTag.style.cssText = 'font-weight:400;color:var(--gray-400);margin-left:6px;font-size:12px;';
+                    typeTag.textContent = '(' + (src.type === 'microsoft' ? 'M365' : 'Google') + ')';
+                    label.appendChild(typeTag);
+                    group.appendChild(label);
+
+                    var calendars = (src.calendars || '').toString().split(',').map(function (c) { return c.trim(); }).filter(Boolean);
+                    if (calendars.length === 0) calendars = ['primary'];
+
+                    calendars.forEach(function (calId) {
+                        var key = src.id + ':' + calId;
+                        var isChecked = visibleCalendars.length === 0 || visibleCalendars.indexOf(key) !== -1;
+
+                        var item = document.createElement('label');
+                        item.className = 'checkbox-label';
+                        item.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;padding-left:8px;';
+                        item.innerHTML = '<input type="checkbox" class="calview-cal-checkbox" data-key="' +
+                            key.replace(/"/g, '&quot;') + '" ' + (isChecked ? 'checked' : '') + '>' +
+                            '<span>' + (calId === 'primary' ? 'Hauptkalender' : calId) + '</span>';
+                        group.appendChild(item);
+                    });
+
+                    container.appendChild(group);
+                });
+            })
+            .catch(function () {
+                container.innerHTML = '<div style="color:var(--error);font-size:14px;">Fehler beim Laden.</div>';
+            });
+    })();
+
+    // Kalenderansicht-Formular speichern
+    var formCalView = document.getElementById('form-calendar-view');
+    if (formCalView) {
+        formCalView.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = this.querySelector('button[type="submit"]');
+
+            var newPw = document.getElementById('calview-new-password').value;
+            var confirmPw = document.getElementById('calview-confirm-password').value;
+            var removePwEl = document.getElementById('calview-remove-password');
+
+            if (newPw && newPw !== confirmPw) {
+                showToast('Passwörter stimmen nicht überein', 'error');
+                return;
+            }
+            if (newPw && newPw.length < 12) {
+                showToast('Passwort muss mindestens 12 Zeichen haben', 'error');
+                return;
+            }
+
+            // Sichtbare Kalender sammeln
+            var visibleCalendars = [];
+            var allChecked = true;
+            var anyUnchecked = false;
+            document.querySelectorAll('.calview-cal-checkbox').forEach(function (cb) {
+                if (cb.checked) {
+                    visibleCalendars.push(cb.dataset.key);
+                } else {
+                    anyUnchecked = true;
+                }
+            });
+            // Wenn alle ausgewählt, leeres Array senden (= alle anzeigen)
+            if (!anyUnchecked) {
+                visibleCalendars = [];
+            }
+
+            var data = {
+                show_event_title: document.getElementById('calview-show-title').checked,
+                visible_calendars: visibleCalendars,
+            };
+
+            if (newPw) {
+                data.new_password = newPw;
+            }
+            if (removePwEl && removePwEl.checked) {
+                data.remove_password = true;
+            }
+
+            setLoading(btn, true);
+            apiPost('save-calendar-view', data).then(function (res) {
+                setLoading(btn, false);
+                if (res.success) {
+                    showToast('Kalenderansicht-Einstellungen gespeichert');
+                    document.getElementById('calview-new-password').value = '';
+                    document.getElementById('calview-confirm-password').value = '';
+                } else {
+                    showToast(res.error || 'Fehler', 'error');
+                }
+            }).catch(function () { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
+        });
+    }
+
     // ==================== Form: Seitendesign ====================
 
     // Image upload

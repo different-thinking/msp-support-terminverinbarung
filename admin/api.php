@@ -63,8 +63,13 @@ try {
             if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
             // Config ohne sensible Felder zurückgeben
             $config = $cm->get();
-            // Passwort-Hash nie an Frontend senden
+            // Passwort-Hashes nie an Frontend senden
             $config['admin'] = ['has_password' => $cm->hasAdminPassword()];
+            $config['calendar_view'] = [
+                'has_password' => $cm->hasCalendarViewPassword(),
+                'show_event_title' => $config['calendar_view']['show_event_title'] ?? true,
+                'visible_calendars' => $config['calendar_view']['visible_calendars'] ?? [],
+            ];
             // Client-Secrets maskieren
             foreach ($config['calendar_sources'] as &$src) {
                 if (!empty($src['client_secret'])) {
@@ -438,6 +443,46 @@ try {
                 'response' => $result['response'],
                 'error' => $result['error'],
             ]);
+            break;
+
+        // ==================== Kalenderansicht-Einstellungen ====================
+        case 'save-calendar-view':
+            requirePost($method);
+            $input = getJsonInput();
+
+            $calView = $cm->getSection('calendar_view') ?: [];
+
+            // Passwort aktualisieren (nur wenn ein neues gesetzt wird)
+            $newPassword = $input['new_password'] ?? '';
+            if (!empty($newPassword)) {
+                if (strlen($newPassword) < MIN_PASSWORD_LENGTH) {
+                    jsonResponse(['error' => 'Passwort muss mindestens 12 Zeichen lang sein'], 422);
+                }
+                $cm->setCalendarViewPassword($newPassword);
+                $calView = $cm->getSection('calendar_view') ?: [];
+            }
+
+            // Passwort entfernen
+            if (!empty($input['remove_password'])) {
+                $calView['password_hash'] = '';
+            }
+
+            // Sichtbare Kalender
+            $visibleCalendars = [];
+            if (isset($input['visible_calendars']) && is_array($input['visible_calendars'])) {
+                foreach ($input['visible_calendars'] as $calKey) {
+                    if (is_string($calKey) && !empty(trim($calKey))) {
+                        $visibleCalendars[] = trim($calKey);
+                    }
+                }
+            }
+            $calView['visible_calendars'] = $visibleCalendars;
+
+            // Titel anzeigen
+            $calView['show_event_title'] = !empty($input['show_event_title']);
+
+            $cm->saveSection('calendar_view', $calView);
+            jsonResponse(['success' => true]);
             break;
 
         // ==================== Admin-Passwort ====================
