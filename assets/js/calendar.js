@@ -30,9 +30,9 @@
         if (isMobile()) {
             state.view = '3day';
         }
+        bindMobilePanel(); // muss vor anderen Bindings laufen (guard im Funktionskopf)
         bindToolbar();
         bindPopup();
-        bindMobilePanel(); // bindet nur wenn Elemente vorhanden (guard im Funktionskopf)
         // Buttons korrekt initialisieren
         document.querySelectorAll('.btn-view').forEach(function (b) {
             b.classList.toggle('active', b.dataset.view === state.view);
