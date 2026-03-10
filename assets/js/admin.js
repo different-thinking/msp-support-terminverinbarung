@@ -500,60 +500,74 @@
 
     // ==================== Form: Kalenderansicht ====================
 
-    // Kalender-Liste für die Kalenderansicht laden
+    // Kalender-Liste für die Kalenderansicht laden (echte Kalenderlisten von den Accounts)
     (function loadCalendarViewCalendars() {
         var container = document.getElementById('calview-calendars-list');
         if (!container) return;
 
-        fetch(API + '?action=config')
-            .then(function (r) { return r.json(); })
-            .then(function (res) {
-                var config = res.config || {};
-                var sources = config.calendar_sources || [];
-                var calView = config.calendar_view || {};
-                var visibleCalendars = calView.visible_calendars || [];
+        // Zuerst Config laden für visible_calendars, dann echte Kalenderlisten
+        Promise.all([
+            fetch(API + '?action=config').then(function (r) { return r.json(); }),
+            fetch(API + '?action=calendar-lists').then(function (r) { return r.json(); })
+        ]).then(function (results) {
+            var config = results[0].config || {};
+            var calView = config.calendar_view || {};
+            var visibleCalendars = calView.visible_calendars || [];
+            var sources = results[1].sources || [];
 
-                if (sources.length === 0) {
-                    container.innerHTML = '<div style="color:var(--gray-400);font-size:14px;">Keine Kalender-Quellen konfiguriert.</div>';
-                    return;
-                }
+            if (sources.length === 0) {
+                container.innerHTML = '<div style="color:var(--gray-400);font-size:14px;">Keine Kalender-Quellen konfiguriert.</div>';
+                return;
+            }
 
-                container.innerHTML = '';
-                sources.forEach(function (src) {
-                    var group = document.createElement('div');
-                    group.style.marginBottom = '12px';
+            container.innerHTML = '';
+            var hasAnyCalendars = false;
 
-                    var label = document.createElement('div');
-                    label.style.cssText = 'font-weight:600;font-size:14px;margin-bottom:6px;';
-                    label.textContent = src.label || src.id;
-                    var typeTag = document.createElement('span');
-                    typeTag.style.cssText = 'font-weight:400;color:var(--gray-400);margin-left:6px;font-size:12px;';
-                    typeTag.textContent = '(' + (src.type === 'microsoft' ? 'M365' : 'Google') + ')';
-                    label.appendChild(typeTag);
-                    group.appendChild(label);
+            sources.forEach(function (src) {
+                if (!src.connected || src.calendars.length === 0) return;
+                hasAnyCalendars = true;
 
-                    var calendars = (src.calendars || '').toString().split(',').map(function (c) { return c.trim(); }).filter(Boolean);
-                    if (calendars.length === 0) calendars = ['primary'];
+                var group = document.createElement('div');
+                group.style.marginBottom = '12px';
 
-                    calendars.forEach(function (calId) {
-                        var key = src.id + ':' + calId;
-                        var isChecked = visibleCalendars.length === 0 || visibleCalendars.indexOf(key) !== -1;
+                var label = document.createElement('div');
+                label.style.cssText = 'font-weight:600;font-size:14px;margin-bottom:6px;';
+                label.textContent = src.label || src.id;
+                var typeTag = document.createElement('span');
+                typeTag.style.cssText = 'font-weight:400;color:var(--gray-400);margin-left:6px;font-size:12px;';
+                typeTag.textContent = '(' + (src.type === 'microsoft' ? 'M365' : 'Google') + ')';
+                label.appendChild(typeTag);
+                group.appendChild(label);
 
-                        var item = document.createElement('label');
-                        item.className = 'checkbox-label';
-                        item.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;padding-left:8px;';
-                        item.innerHTML = '<input type="checkbox" class="calview-cal-checkbox" data-key="' +
-                            key.replace(/"/g, '&quot;') + '" ' + (isChecked ? 'checked' : '') + '>' +
-                            '<span>' + (calId === 'primary' ? 'Hauptkalender' : calId) + '</span>';
-                        group.appendChild(item);
-                    });
+                src.calendars.forEach(function (cal) {
+                    var key = src.id + ':' + cal.id;
+                    var isChecked = visibleCalendars.length === 0 || visibleCalendars.indexOf(key) !== -1;
 
-                    container.appendChild(group);
+                    var item = document.createElement('label');
+                    item.className = 'checkbox-label';
+                    item.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;padding-left:8px;';
+
+                    var colorDot = '';
+                    if (cal.color) {
+                        colorDot = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' +
+                            cal.color + ';margin-right:6px;flex-shrink:0;"></span>';
+                    }
+
+                    item.innerHTML = '<input type="checkbox" class="calview-cal-checkbox" data-key="' +
+                        key.replace(/"/g, '&quot;') + '" ' + (isChecked ? 'checked' : '') + '>' +
+                        colorDot + '<span>' + (cal.name || cal.id) + '</span>';
+                    group.appendChild(item);
                 });
-            })
-            .catch(function () {
-                container.innerHTML = '<div style="color:var(--error);font-size:14px;">Fehler beim Laden.</div>';
+
+                container.appendChild(group);
             });
+
+            if (!hasAnyCalendars) {
+                container.innerHTML = '<div style="color:var(--gray-400);font-size:14px;">Keine verbundenen Kalender gefunden. Bitte zuerst unter "Kalender" eine Quelle verbinden.</div>';
+            }
+        }).catch(function () {
+            container.innerHTML = '<div style="color:var(--error);font-size:14px;">Fehler beim Laden der Kalender.</div>';
+        });
     })();
 
     // Kalenderansicht-Formular speichern
