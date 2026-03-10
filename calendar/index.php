@@ -157,6 +157,30 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     </main>
 </div>
 
+<!-- Mobile Bottom-Bar + Overlay-Panel -->
+<div class="mobile-bottom-bar" id="mobileBottomBar">
+    <button class="mobile-bottom-toggle" id="mobileBottomToggle">
+        <span class="mobile-bottom-icon">&#128197;</span>
+        <span class="mobile-bottom-label">Kalender</span>
+        <span class="mobile-bottom-chevron" id="mobileChevron">&#9650;</span>
+    </button>
+    <a href="?logout" class="mobile-bottom-logout" title="Abmelden">&#x2716;</a>
+</div>
+
+<div class="mobile-panel-overlay hidden" id="mobilePanelOverlay"></div>
+<div class="mobile-panel" id="mobilePanel">
+    <div class="mobile-panel-handle" id="mobilePanelHandle">
+        <div class="mobile-panel-handle-bar"></div>
+    </div>
+    <div class="mobile-panel-content">
+        <div class="mini-calendar" id="miniCalendarMobile"></div>
+        <div class="cal-sources">
+            <h3>Kalender</h3>
+            <div class="cal-sources-list" id="calSourcesListMobile"></div>
+        </div>
+    </div>
+</div>
+
 <!-- Event-Detail-Popup -->
 <div class="cal-popup-overlay hidden" id="eventPopupOverlay">
     <div class="cal-popup" id="eventPopup">

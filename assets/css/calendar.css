@@ -803,26 +803,147 @@ body {
 /* Mobile-only view buttons (hidden on desktop) */
 .btn-view-mobile { display: none; }
 
+/* Mobile Bottom-Bar + Panel (hidden on desktop) */
+.mobile-bottom-bar { display: none; }
+.mobile-panel-overlay { display: none; }
+.mobile-panel { display: none; }
+
 /* ==================== Responsive ==================== */
 @media (max-width: 768px) {
     .cal-app { flex-direction: column; }
 
-    /* Sidebar unter den Kalender verschieben */
-    .cal-sidebar {
-        width: 100%;
-        border-right: none;
-        border-top: 1px solid var(--gray-200);
-        border-bottom: none;
-        order: 2;
-        max-height: none;
-    }
+    /* Sidebar auf Mobile verstecken – wird über Bottom-Panel zugänglich */
+    .cal-sidebar { display: none; }
 
     .cal-main {
-        order: 1;
-        min-height: 100svh;
+        flex: 1;
+        min-height: 0;
+        padding-bottom: 48px; /* Platz für Bottom-Bar */
     }
 
-    body { overflow: auto; height: auto; }
+    body { overflow: hidden; height: 100vh; height: 100svh; }
+
+    .cal-app { height: 100vh; height: 100svh; }
+
+    /* ===== Mobile Bottom-Bar ===== */
+    .mobile-bottom-bar {
+        display: flex;
+        align-items: center;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 48px;
+        background: white;
+        border-top: 1px solid var(--gray-200);
+        padding: 0 16px;
+        z-index: 50;
+        gap: 8px;
+    }
+
+    .mobile-bottom-toggle {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--gray-700);
+        padding: 8px 0;
+    }
+
+    .mobile-bottom-icon { font-size: 18px; }
+
+    .mobile-bottom-label { flex: 1; text-align: left; }
+
+    .mobile-bottom-chevron {
+        font-size: 10px;
+        color: var(--gray-400);
+        transition: transform 0.3s;
+    }
+
+    .mobile-bottom-bar.open .mobile-bottom-chevron {
+        transform: rotate(180deg);
+    }
+
+    .mobile-bottom-logout {
+        color: var(--gray-400);
+        text-decoration: none;
+        font-size: 14px;
+        padding: 8px;
+        border-radius: var(--radius-sm);
+    }
+
+    .mobile-bottom-logout:hover {
+        color: var(--error);
+    }
+
+    /* ===== Mobile Panel Overlay ===== */
+    .mobile-panel-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 59;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s;
+    }
+
+    .mobile-panel-overlay.visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* ===== Mobile Slide-Up Panel ===== */
+    .mobile-panel {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        bottom: 48px;
+        left: 0;
+        right: 0;
+        max-height: 65vh;
+        background: white;
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+        z-index: 60;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+    }
+
+    .mobile-panel.open {
+        transform: translateY(0);
+    }
+
+    .mobile-panel-handle {
+        display: flex;
+        justify-content: center;
+        padding: 10px 0 6px;
+        cursor: grab;
+        flex-shrink: 0;
+    }
+
+    .mobile-panel-handle-bar {
+        width: 36px;
+        height: 4px;
+        background: var(--gray-300);
+        border-radius: 2px;
+    }
+
+    .mobile-panel-content {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 8px;
+    }
 
     .cal-toolbar {
         flex-direction: column;
