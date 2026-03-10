@@ -819,7 +819,7 @@ body {
 
     .cal-main {
         order: 1;
-        min-height: 70vh;
+        min-height: 100svh;
     }
 
     body { overflow: auto; height: auto; }
