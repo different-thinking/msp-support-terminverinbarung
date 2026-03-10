@@ -159,7 +159,11 @@ $csrfToken = SecurityHelper::generateCsrfToken();
 
 <!-- Mobile Bottom-Bar + Overlay-Panel -->
 <div class="mobile-bottom-bar" id="mobileBottomBar">
-    <button class="mobile-bottom-toggle" id="mobileBottomToggle">
+    <button class="mobile-bottom-toggle" id="mobileBottomToggle" type="button"
+            onclick="document.getElementById('mobilePanel').classList.toggle('open');
+                     document.getElementById('mobilePanelOverlay').classList.toggle('hidden');
+                     document.getElementById('mobilePanelOverlay').classList.toggle('visible');
+                     this.closest('.mobile-bottom-bar').classList.toggle('open');">
         <span class="mobile-bottom-icon">&#128197;</span>
         <span class="mobile-bottom-label">Kalender</span>
         <span class="mobile-bottom-chevron" id="mobileChevron">&#9650;</span>
@@ -167,7 +171,10 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     <a href="?logout" class="mobile-bottom-logout" title="Abmelden">&#x2716;</a>
 </div>
 
-<div class="mobile-panel-overlay hidden" id="mobilePanelOverlay"></div>
+<div class="mobile-panel-overlay hidden" id="mobilePanelOverlay"
+     onclick="document.getElementById('mobilePanel').classList.remove('open');
+              this.classList.add('hidden'); this.classList.remove('visible');
+              document.getElementById('mobileBottomBar').classList.remove('open');"></div>
 <div class="mobile-panel" id="mobilePanel">
     <div class="mobile-panel-handle" id="mobilePanelHandle">
         <div class="mobile-panel-handle-bar"></div>
