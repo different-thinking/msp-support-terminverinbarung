@@ -20,6 +20,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 require_once __DIR__ . '/../src/BookingService.php';
 
 try {
+    // Probabilistischer Webhook-Worker-Trigger (~1% der Slot-Requests)
+    if (random_int(1, 100) === 1) {
+        require_once __DIR__ . '/../src/WebhookQueue.php';
+        try { (new WebhookQueue())->processBatch(); } catch (\Throwable $e) { /* nicht stoeren */ }
+    }
+
     $service = new BookingService();
     $action = $_GET['action'] ?? '';
 

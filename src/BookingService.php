@@ -5,6 +5,8 @@ require_once __DIR__ . '/CalendarServiceInterface.php';
 require_once __DIR__ . '/MicrosoftCalendarService.php';
 require_once __DIR__ . '/GoogleCalendarService.php';
 require_once __DIR__ . '/AvailabilityEngine.php';
+require_once __DIR__ . '/FunnelManager.php';
+require_once __DIR__ . '/WebhookQueue.php';
 
 /**
  * Haupt-Service für die Terminbuchung.
@@ -152,8 +154,11 @@ class BookingService
         // Informationsmail an Kalenderinhaber senden
         $this->sendOwnerNotification($bookingTarget, $bookingData, $start, $end, $teamsLink);
 
-        // Webhook auslösen
+        // Globaler Webhook (synchron, legacy)
         $this->fireWebhook($bookingData, $start, $end, $teamsLink);
+
+        // Funnel-spezifischer Webhook (async, mit Retry)
+        $this->enqueueFunnelWebhook($bookingData, $start, $end, $teamsLink);
 
         return [
             'success' => true,
@@ -410,6 +415,45 @@ class BookingService
         $html .= '</div>';
 
         return $html;
+    }
+
+    /**
+     * Stellt einen Webhook-Job in die Queue, wenn die Buchung einem
+     * aktiven Funnel zugeordnet ist. Schluckt Fehler, damit die Buchung
+     * nicht von Queue-Problemen abhaengt.
+     */
+    private function enqueueFunnelWebhook(
+        array $bookingData,
+        \DateTime $start,
+        \DateTime $end,
+        string $teamsLink
+    ): void {
+        $rawSlug = $bookingData['funnel'] ?? '';
+        $slug = FunnelManager::normalizeSlug(is_string($rawSlug) ? $rawSlug : '');
+        if ($slug === null) return;
+
+        $funnels = $this->config['funnels'] ?? [];
+        $funnel = FunnelManager::findActive($funnels, $slug);
+        if ($funnel === null) return;
+
+        $payload = $this->buildWebhookPayload($bookingData, $start, $end, $teamsLink);
+        $payload['event'] = 'booking.created';
+        $payload['funnel'] = [
+            'slug' => $funnel['slug'],
+            'name' => $funnel['name'],
+        ];
+
+        try {
+            $queue = new WebhookQueue();
+            $queue->enqueue(
+                $funnel['slug'],
+                $funnel['webhook_url'],
+                (string)($funnel['webhook_secret'] ?? ''),
+                $payload
+            );
+        } catch (\Throwable $e) {
+            SecurityHelper::logError('FunnelWebhook', 'Enqueue failed', $e);
+        }
     }
 
     /**

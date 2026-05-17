@@ -138,6 +138,25 @@ class ConfigManager
                 }
                 break;
 
+            case 'funnels':
+                if (!is_array($value)) {
+                    throw new \InvalidArgumentException("Config 'funnels' muss ein Array sein");
+                }
+                require_once __DIR__ . '/FunnelManager.php';
+                $seen = [];
+                foreach ($value as $funnel) {
+                    if (!is_array($funnel)) {
+                        throw new \InvalidArgumentException('Funnel-Eintrag muss ein Array sein');
+                    }
+                    FunnelManager::validateOne($funnel);
+                    $slug = FunnelManager::normalizeSlug($funnel['slug']);
+                    if (isset($seen[$slug])) {
+                        throw new \InvalidArgumentException("Funnel-Slug '{$slug}' ist mehrfach vergeben");
+                    }
+                    $seen[$slug] = true;
+                }
+                break;
+
             // break_time, teams, page_design, admin – nur Typ-Check
             default:
                 // Kein spezifischer Validator – nur generelle Typpruefung
@@ -321,6 +340,7 @@ class ConfigManager
                 'secret' => '',
                 'headers' => [],
             ],
+            'funnels' => [],
             'calendar_view' => [
                 'password_hash' => '',
                 'show_event_title' => true,
