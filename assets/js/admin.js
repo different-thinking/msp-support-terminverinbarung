@@ -1044,7 +1044,7 @@
                 setLoading(btn, false);
                 if (res.success) {
                     showToast('Funnels gespeichert');
-                    rebuildFunnelsList(res.funnels || []);
+                    loadFunnels();
                 } else {
                     showToast(res.error || 'Fehler', 'error');
                 }
@@ -1152,6 +1152,13 @@
             loadQueue('pending');
         });
     });
+
+    // Auch initial laden (z.B. wenn die Seite direkt mit #funnels geoeffnet wird,
+    // weil der Hash-Click oben vor dem Anhaengen des Click-Listeners passiert).
+    if (funnelsList) {
+        loadFunnels();
+        loadQueue('pending');
+    }
 
     // ==================== ESC schließt Modals ====================
     document.addEventListener('keydown', function (e) {
