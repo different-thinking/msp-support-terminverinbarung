@@ -92,6 +92,7 @@ foreach ($config['calendar_sources'] as $src) {
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
     <meta name="csrf-token" content="<?= htmlspecialchars(SecurityHelper::generateCsrfToken()) ?>">
+    <meta name="app-base-url" content="<?= htmlspecialchars(rtrim($config['app']['url'] ?? '', '/')) ?>">
 </head>
 <body>
 

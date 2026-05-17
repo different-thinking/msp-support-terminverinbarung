@@ -47,15 +47,7 @@ class WebhookQueue
      */
     public function dispatch(array $funnel, array $payload): array
     {
-        $id = $this->generateId();
-        $url = (string)($funnel['webhook_url'] ?? '');
-        $secret = (string)($funnel['webhook_secret'] ?? '');
-
-        $payloadForSend = $payload;
-        $payloadForSend['delivery_id'] = $id;
-        $payloadForSend['attempt'] = 1;
-
-        $result = $this->httpPost($url, $payloadForSend, $secret);
+        [$id, $result] = $this->firstAttempt($funnel, $payload);
 
         if ($result['success']) {
             return [
@@ -70,8 +62,8 @@ class WebhookQueue
         $job = [
             'id' => $id,
             'funnel_slug' => (string)($funnel['slug'] ?? ''),
-            'target_url' => $url,
-            'secret' => $secret,
+            'target_url' => (string)($funnel['webhook_url'] ?? ''),
+            'secret' => (string)($funnel['webhook_secret'] ?? ''),
             'payload' => $payload,
             'attempts' => 1,
             'next_run_at' => $now + self::BACKOFF_SECONDS[0],
@@ -150,13 +142,26 @@ class WebhookQueue
      */
     public function testSend(array $funnel, array $payload): array
     {
-        $payload['delivery_id'] = $this->generateId();
+        return $this->firstAttempt($funnel, $payload)[1];
+    }
+
+    /**
+     * Generiert eine Delivery-ID, haengt sie ans Payload und sendet einmal.
+     * Gemeinsamer Pfad fuer dispatch() (mit Persistenz) und testSend().
+     *
+     * @return array{0:string,1:array} [Delivery-ID, httpPost-Result]
+     */
+    private function firstAttempt(array $funnel, array $payload): array
+    {
+        $id = $this->generateId();
+        $payload['delivery_id'] = $id;
         $payload['attempt'] = 1;
-        return $this->httpPost(
+        $result = $this->httpPost(
             (string)($funnel['webhook_url'] ?? ''),
             $payload,
             (string)($funnel['webhook_secret'] ?? '')
         );
+        return [$id, $result];
     }
 
     /** Verschiebt einen Job aus failed/ zurueck nach pending/ mit attempts=0. */

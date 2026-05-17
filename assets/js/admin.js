@@ -902,27 +902,34 @@
     var funnelsList = document.getElementById('funnels-list');
     var funnelsEmptyHint = document.getElementById('funnels-empty-hint');
     var funnelsLoaded = [];
+    // Pro Row die Funnel-Daten – vermeidet JSON.stringify/parse via dataset und
+    // haelt das Secret aus dem DOM-Inspector raus.
+    var funnelByRow = new WeakMap();
+
+    var MODE_VIEW = 'view';
+    var MODE_EDIT = 'edit';
 
     function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
     function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-    // Pretty-URL fuer einen Funnel: aus /admin/-Pfad die Basis ableiten und Slug anhaengen.
     function funnelUrl(slug) {
+        var configured = document.querySelector('meta[name="app-base-url"]')?.content || '';
+        if (configured) return configured.replace(/\/+$/, '') + '/' + (slug || '');
+        // Fallback: aus dem aktuellen Admin-Pfad ableiten.
         var base = location.pathname.replace(/admin\/?(index\.php)?$/, '');
         if (!base.endsWith('/')) base += '/';
         return location.origin + base + (slug || '');
     }
 
-    function renderFunnelRow(f, mode, isNew) {
+    function renderFunnelRow(f, mode) {
         var div = document.createElement('div');
         div.className = 'funnel-row admin-card';
         div.style.marginBottom = '12px';
         div.dataset.mode = mode;
         div.dataset.originalSlug = f.slug || '';
-        div.dataset.isNew = isNew ? '1' : '0';
-        div.dataset.funnel = JSON.stringify(f);
+        funnelByRow.set(div, f);
 
-        if (mode === 'view') {
+        if (mode === MODE_VIEW) {
             var slug = f.slug || '';
             var name = f.name || '(unbenannt)';
             var disabled = f.enabled === false;
@@ -979,8 +986,12 @@
         return div;
     }
 
+    function isNewRow(row) {
+        return !row.dataset.originalSlug;
+    }
+
     function readFunnelFromRow(row) {
-        if (row.dataset.mode === 'edit') {
+        if (row.dataset.mode === MODE_EDIT) {
             return {
                 slug: row.querySelector('.f-slug').value.trim(),
                 name: row.querySelector('.f-name').value.trim(),
@@ -989,11 +1000,11 @@
                 enabled: row.querySelector('.f-enabled').checked,
             };
         }
-        return JSON.parse(row.dataset.funnel || '{}');
+        return funnelByRow.get(row) || {};
     }
 
-    function swapRow(oldRow, f, mode, isNew) {
-        var newRow = renderFunnelRow(f, mode, isNew);
+    function swapRow(oldRow, f, mode) {
+        var newRow = renderFunnelRow(f, mode);
         oldRow.replaceWith(newRow);
         bindRowButtons(newRow);
     }
@@ -1001,21 +1012,19 @@
     function bindRowButtons(row) {
         var editBtn = row.querySelector('.f-edit');
         if (editBtn) editBtn.onclick = function () {
-            var f = JSON.parse(row.dataset.funnel || '{}');
-            swapRow(row, f, 'edit', false);
+            swapRow(row, funnelByRow.get(row) || {}, MODE_EDIT);
         };
 
         var cancelBtn = row.querySelector('.f-cancel');
         if (cancelBtn) cancelBtn.onclick = function () {
-            if (row.dataset.isNew === '1') {
+            if (isNewRow(row)) {
                 row.remove();
                 if (funnelsList.children.length === 0 && funnelsEmptyHint) {
                     funnelsList.appendChild(funnelsEmptyHint);
                     funnelsEmptyHint.style.display = '';
                 }
             } else {
-                var f = JSON.parse(row.dataset.funnel || '{}');
-                swapRow(row, f, 'view', false);
+                swapRow(row, funnelByRow.get(row) || {}, MODE_VIEW);
             }
         };
 
@@ -1036,10 +1045,8 @@
         if (!newF.webhook_url) { showToast('Webhook-URL erforderlich', 'error'); return; }
 
         var originalSlug = row.dataset.originalSlug || '';
-        var isNew = row.dataset.isNew === '1';
-
         var list = funnelsLoaded.slice();
-        if (isNew) {
+        if (isNewRow(row)) {
             list.push(newF);
         } else {
             var idx = list.findIndex(function (x) { return x.slug === originalSlug; });
@@ -1057,7 +1064,7 @@
             btn.textContent = orig;
             if (res.success) {
                 showToast('Funnel gespeichert');
-                loadFunnels();
+                rebuildFunnelsList(res.funnels || list);
             } else {
                 showToast(res.error || 'Fehler beim Speichern', 'error');
             }
@@ -1069,8 +1076,8 @@
     }
 
     function deleteRow(row) {
-        if (row.dataset.isNew === '1') { row.remove(); return; }
-        var f = JSON.parse(row.dataset.funnel || '{}');
+        if (isNewRow(row)) { row.remove(); return; }
+        var f = funnelByRow.get(row) || {};
         var originalSlug = row.dataset.originalSlug || '';
         if (!confirm('Funnel "' + (f.name || originalSlug) + '" wirklich loeschen?')) return;
 
@@ -1078,7 +1085,7 @@
         apiPost('funnels-save', { funnels: list }).then(function (res) {
             if (res.success) {
                 showToast('Funnel geloescht');
-                loadFunnels();
+                rebuildFunnelsList(res.funnels || list);
             } else {
                 showToast(res.error || 'Fehler', 'error');
             }
@@ -1122,7 +1129,7 @@
         } else {
             if (funnelsEmptyHint) funnelsEmptyHint.style.display = 'none';
             funnelsLoaded.forEach(function (f) {
-                var row = renderFunnelRow(f, 'view', false);
+                var row = renderFunnelRow(f, MODE_VIEW);
                 funnelsList.appendChild(row);
                 bindRowButtons(row);
             });
@@ -1141,7 +1148,7 @@
     if (btnAddFunnel) {
         btnAddFunnel.addEventListener('click', function () {
             if (funnelsEmptyHint) funnelsEmptyHint.style.display = 'none';
-            var row = renderFunnelRow({ enabled: true }, 'edit', true);
+            var row = renderFunnelRow({ enabled: true }, MODE_EDIT);
             funnelsList.appendChild(row);
             bindRowButtons(row);
         });
@@ -1248,9 +1255,10 @@
         });
     });
 
-    // Auch initial laden (z.B. wenn die Seite direkt mit #funnels geoeffnet wird,
-    // weil der Hash-Click oben vor dem Anhaengen des Click-Listeners passiert).
-    if (funnelsList) {
+    // Initial laden, wenn die Seite direkt mit #funnels geoeffnet wurde –
+    // der Hash-Click oben passiert vor dem Anhaengen der Tab-Listener,
+    // dadurch wuerde sonst nichts gefetcht.
+    if (funnelsList && location.hash === '#funnels') {
         loadFunnels();
         loadQueue('pending');
     }
