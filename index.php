@@ -10,7 +10,7 @@ $config = require __DIR__ . '/config.php';
 
 // Funnel aus URL gegen Allowlist pruefen; nur bekannte und aktive Slugs durchreichen.
 $activeFunnelSlug = '';
-$rawFunnel = $_GET['funnel'] ?? null;
+$rawFunnel = $_GET['termin'] ?? null;
 if (is_string($rawFunnel)) {
     $candidate = FunnelManager::normalizeSlug($rawFunnel);
     if ($candidate !== null && FunnelManager::findActive($config['funnels'] ?? [], $candidate) !== null) {
