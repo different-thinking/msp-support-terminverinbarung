@@ -906,6 +906,13 @@
     function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
     function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+    // Pretty-URL fuer einen Funnel: aus /admin/-Pfad die Basis ableiten und Slug anhaengen.
+    function funnelUrl(slug) {
+        var base = location.pathname.replace(/admin\/?(index\.php)?$/, '');
+        if (!base.endsWith('/')) base += '/';
+        return location.origin + base + (slug || '');
+    }
+
     function renderFunnelRow(f, mode, isNew) {
         var div = document.createElement('div');
         div.className = 'funnel-row admin-card';
@@ -919,12 +926,13 @@
             var slug = f.slug || '';
             var name = f.name || '(unbenannt)';
             var disabled = f.enabled === false;
+            var url = funnelUrl(slug);
             div.innerHTML =
                 '<div style="display:flex;align-items:center;gap:16px;">' +
                 '  <div style="flex:1;">' +
                 '    <strong>' + escText(name) + '</strong>' +
                 (disabled ? ' <span style="background:var(--gray-200);color:var(--gray-700);padding:2px 8px;border-radius:4px;font-size:12px;margin-left:8px;">inaktiv</span>' : '') +
-                '    <div class="text-muted" style="font-size:13px;margin-top:4px;">URL: <code>?termin=' + escText(slug) + '</code></div>' +
+                '    <div class="text-muted" style="font-size:13px;margin-top:4px;">URL: <a href="' + escAttr(url) + '" target="_blank"><code>' + escText(url) + '</code></a></div>' +
                 '  </div>' +
                 '  <div style="display:flex;gap:6px;">' +
                 '    <button type="button" class="btn btn-secondary f-test">Test</button>' +
@@ -943,7 +951,7 @@
                 '  <div class="form-group" style="flex:1;">' +
                 '    <label>Slug <span class="required">*</span></label>' +
                 '    <input type="text" class="f-slug" value="' + slugVal + '" placeholder="webinar-a" maxlength="50">' +
-                '    <div class="form-hint">URL: <code>?termin=' + (slugVal || '&lt;slug&gt;') + '</code></div>' +
+                '    <div class="form-hint">URL: <code>' + escText(funnelUrl(slugVal || '<slug>')) + '</code></div>' +
                 '  </div>' +
                 '  <div class="form-group" style="flex:2;">' +
                 '    <label>Name <span class="required">*</span></label>' +
