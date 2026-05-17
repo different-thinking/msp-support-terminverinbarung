@@ -920,7 +920,7 @@
             '  <div class="form-group" style="flex:1;">' +
             '    <label>Slug <span class="required">*</span></label>' +
             '    <input type="text" class="f-slug" value="' + slug + '" placeholder="webinar-a" maxlength="50">' +
-            '    <div class="form-hint">URL: <code>?funnel=' + (slug || '&lt;slug&gt;') + '</code></div>' +
+            '    <div class="form-hint">URL: <code>?termin=' + (slug || '&lt;slug&gt;') + '</code></div>' +
             '  </div>' +
             '  <div class="form-group" style="flex:2;">' +
             '    <label>Name <span class="required">*</span></label>' +

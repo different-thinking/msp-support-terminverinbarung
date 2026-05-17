@@ -880,7 +880,7 @@ foreach ($config['calendar_sources'] as $src) {
                 <h3 class="card-section-title">So funktioniert&apos;s</h3>
                 <p class="text-muted" style="margin-bottom:8px;">
                     Lege f&uuml;r jeden Funnel einen Slug an (z.B. <code>webinar-a</code>). Rufe die Buchungsseite mit
-                    <code>?funnel=webinar-a</code> auf &ndash; nur bekannte und aktivierte Slugs werden &uuml;bernommen.
+                    <code>?termin=webinar-a</code> auf &ndash; nur bekannte und aktivierte Slugs werden &uuml;bernommen.
                     Nach jeder erfolgreichen Buchung wird der zugeh&ouml;rige Webhook in eine Queue eingestellt und mit
                     Retry zugestellt (10 Versuche, Backoff: 1m / 5m / 15m / 30m / 1h / 2h / 4h / 8h / 12h / 24h).
                 </p>
