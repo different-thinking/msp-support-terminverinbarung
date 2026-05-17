@@ -144,6 +144,21 @@ class WebhookQueue
         return $jobs;
     }
 
+    /**
+     * Test-Versand: macht denselben HTTP-POST wie dispatch(), aber persistiert
+     * nichts. Sicher fuer "Test senden"-Buttons im Admin-UI.
+     */
+    public function testSend(array $funnel, array $payload): array
+    {
+        $payload['delivery_id'] = $this->generateId();
+        $payload['attempt'] = 1;
+        return $this->httpPost(
+            (string)($funnel['webhook_url'] ?? ''),
+            $payload,
+            (string)($funnel['webhook_secret'] ?? '')
+        );
+    }
+
     /** Verschiebt einen Job aus failed/ zurueck nach pending/ mit attempts=0. */
     public function retry(string $jobId): bool
     {

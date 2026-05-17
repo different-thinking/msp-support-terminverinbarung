@@ -970,13 +970,21 @@
         funnelsList.querySelectorAll('.f-test').forEach(function (btn) {
             btn.onclick = function () {
                 var row = this.closest('.funnel-row');
-                var slug = row.querySelector('.f-slug').value.trim();
-                if (!slug) { showToast('Bitte zuerst Slug speichern', 'error'); return; }
+                var data = {
+                    slug: row.querySelector('.f-slug').value.trim(),
+                    name: row.querySelector('.f-name').value.trim(),
+                    webhook_url: row.querySelector('.f-url').value.trim(),
+                    webhook_secret: row.querySelector('.f-secret').value,
+                };
+                if (!data.slug || !data.webhook_url) {
+                    showToast('Bitte Slug und Webhook-URL ausfuellen', 'error');
+                    return;
+                }
                 var orig = this.textContent;
                 this.disabled = true;
                 this.textContent = 'Sende...';
                 var self = this;
-                apiPost('funnels-test', { slug: slug }).then(function (res) {
+                apiPost('funnels-test', data).then(function (res) {
                     self.disabled = false;
                     self.textContent = orig;
                     var box = document.getElementById('funnel-test-result');
