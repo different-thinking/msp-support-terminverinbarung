@@ -1011,7 +1011,7 @@
 
     function loadFunnels() {
         if (!funnelsList) return;
-        fetch('api.php?action=funnels-list', { credentials: 'same-origin' })
+        fetch('api.php?action=funnels-list')
             .then(function (r) { return r.json(); })
             .then(function (res) { rebuildFunnelsList(res.funnels || []); })
             .catch(function () { showToast('Konnte Funnels nicht laden', 'error'); });
@@ -1052,7 +1052,7 @@
         var listEl = document.getElementById('funnel-queue-list');
         if (!listEl) return;
         listEl.innerHTML = '<p class="text-muted">Lade&hellip;</p>';
-        fetch('api.php?action=webhook-queue&bucket=' + encodeURIComponent(currentBucket), { credentials: 'same-origin' })
+        fetch('api.php?action=webhook-queue&bucket=' + encodeURIComponent(currentBucket))
             .then(function (r) { return r.json(); })
             .then(function (res) {
                 var counts = res.counts || { pending: 0, done: 0, failed: 0 };

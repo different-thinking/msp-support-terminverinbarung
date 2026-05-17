@@ -755,7 +755,10 @@ foreach ($config['calendar_sources'] as $src) {
         <section id="tab-webhook" class="tab-content">
             <div class="tab-header">
                 <h1>Webhook</h1>
-                <p>Nach jeder Buchung einen HTTP-Request an einen externen Service senden</p>
+                <p>Nach jeder Buchung einen HTTP-Request an einen externen Service senden.
+                   <strong>Hinweis:</strong> Wenn eine Buchung einem Funnel zugeordnet ist
+                   (Tab &bdquo;Funnels&ldquo;), wird stattdessen dessen Webhook gefeuert &ndash;
+                   dieser globale Webhook fungiert als Fallback fuer Buchungen ohne Funnel.</p>
             </div>
 
             <?php $webhookConfig = $config['webhook'] ?? ['enabled' => false, 'url' => '', 'secret' => '', 'headers' => []]; ?>

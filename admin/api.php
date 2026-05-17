@@ -591,8 +591,8 @@ try {
         // ==================== Webhook-Queue ====================
         case 'webhook-queue':
             if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
-            $bucket = $_GET['bucket'] ?? 'pending';
-            if (!in_array($bucket, ['pending', 'done', 'failed'], true)) $bucket = 'pending';
+            $bucket = $_GET['bucket'] ?? WebhookQueue::BUCKET_PENDING;
+            if (!in_array($bucket, WebhookQueue::BUCKETS, true)) $bucket = WebhookQueue::BUCKET_PENDING;
             $queue = new WebhookQueue();
             $jobs = $queue->list($bucket, 50);
             // Secrets nie an Frontend zurueckgeben

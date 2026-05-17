@@ -3,18 +3,23 @@
 /**
  * Dateibasierte Webhook-Queue mit Retry-Logik.
  *
- * Jobs werden als JSON-Dateien in data/webhook-queue/pending/ abgelegt.
- * Bei erfolgreicher Zustellung wandern sie nach done/, bei Aufgabe nach failed/.
+ * Aufrufmuster:
+ * - dispatch(): synchroner erster POST; nur bei Fehlschlag wird ein
+ *   Job in pending/ angelegt. So sind erfolgreiche Zustellungen
+ *   weiterhin "frei" und der User merkt den Webhook am Buchungs-Request.
+ * - processBatch(): arbeitet faellige Retry-Jobs ab (probabilistisch aus
+ *   api/slots.php heraus oder per Cron ueber api/webhook-worker.php).
  *
- * Backoff-Schedule (10 Versuche, ueber 24h verteilt):
+ * Backoff-Schedule (10 Versuche, verteilt ueber 24h):
  *   1min, 5min, 15min, 30min, 1h, 2h, 4h, 8h, 12h, 24h
- *
- * Der Worker wird probabilistisch aus api/book.php und api/slots.php heraus
- * gestartet (kein Cron noetig). Zusaetzlich gibt es api/webhook-worker.php
- * fuer optionalen Cron-Betrieb.
  */
 class WebhookQueue
 {
+    public const BUCKET_PENDING = 'pending';
+    public const BUCKET_DONE = 'done';
+    public const BUCKET_FAILED = 'failed';
+    public const BUCKETS = [self::BUCKET_PENDING, self::BUCKET_DONE, self::BUCKET_FAILED];
+
     private const BACKOFF_SECONDS = [60, 300, 900, 1800, 3600, 7200, 14400, 28800, 43200, 86400];
     private const MAX_ATTEMPTS = 10;
     private const MAX_BATCH = 10;
@@ -32,35 +37,57 @@ class WebhookQueue
     }
 
     /**
-     * Fuegt einen neuen Job in die pending/-Queue ein.
+     * Versucht einen Webhook synchron zuzustellen. Bei Erfolg ist nichts
+     * weiter zu tun; bei Fehlschlag wird ein Retry-Job in pending/ abgelegt
+     * (attempts=1, naechster Versuch nach Backoff).
      *
-     * @param string $funnelSlug
-     * @param string $targetUrl
-     * @param string $secret  Optional, fuer HMAC-Signatur
-     * @param array  $payload Beliebiges JSON-serialisierbares Payload
-     * @return string Job-ID
+     * @param array $funnel  Funnel-Definition (slug, webhook_url, webhook_secret, ...)
+     * @param array $payload JSON-serialisierbares Payload
+     * @return array ['delivered' => bool, 'enqueued' => bool, 'status_code' => int, 'error' => string]
      */
-    public function enqueue(string $funnelSlug, string $targetUrl, string $secret, array $payload): string
+    public function dispatch(array $funnel, array $payload): array
     {
         $id = $this->generateId();
-        $now = time();
+        $url = (string)($funnel['webhook_url'] ?? '');
+        $secret = (string)($funnel['webhook_secret'] ?? '');
 
+        $payloadForSend = $payload;
+        $payloadForSend['delivery_id'] = $id;
+        $payloadForSend['attempt'] = 1;
+
+        $result = $this->httpPost($url, $payloadForSend, $secret);
+
+        if ($result['success']) {
+            return [
+                'delivered' => true,
+                'enqueued' => false,
+                'status_code' => $result['status_code'],
+                'error' => '',
+            ];
+        }
+
+        $now = time();
         $job = [
             'id' => $id,
-            'funnel_slug' => $funnelSlug,
-            'target_url' => $targetUrl,
+            'funnel_slug' => (string)($funnel['slug'] ?? ''),
+            'target_url' => $url,
             'secret' => $secret,
             'payload' => $payload,
-            'attempts' => 0,
-            'next_run_at' => $now,
+            'attempts' => 1,
+            'next_run_at' => $now + self::BACKOFF_SECONDS[0],
             'first_queued_at' => $now,
-            'last_attempt_at' => null,
-            'last_status_code' => null,
-            'last_error' => '',
+            'last_attempt_at' => $now,
+            'last_status_code' => $result['status_code'],
+            'last_error' => $result['error'] ?: '',
         ];
+        $this->writeJob($this->baseDir . '/' . self::BUCKET_PENDING . '/' . $id . '.json', $job);
 
-        $this->writeJob($this->baseDir . '/pending/' . $id . '.json', $job);
-        return $id;
+        return [
+            'delivered' => false,
+            'enqueued' => true,
+            'status_code' => $result['status_code'],
+            'error' => $result['error'],
+        ];
     }
 
     /**
@@ -73,32 +100,21 @@ class WebhookQueue
     {
         $lockFile = $this->baseDir . '/.lock';
         $lockHandle = fopen($lockFile, 'c');
-        if ($lockHandle === false) {
-            return ['processed' => 0, 'succeeded' => 0, 'requeued' => 0, 'failed' => 0];
-        }
-
-        if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
-            fclose($lockHandle);
+        if ($lockHandle === false || !flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            if ($lockHandle !== false) fclose($lockHandle);
             return ['processed' => 0, 'succeeded' => 0, 'requeued' => 0, 'failed' => 0];
         }
 
         $stats = ['processed' => 0, 'succeeded' => 0, 'requeued' => 0, 'failed' => 0];
 
         try {
-            $jobs = $this->loadDueJobs();
-            foreach ($jobs as $job) {
+            foreach ($this->loadDueJobs() as $job) {
                 $stats['processed']++;
                 $result = $this->deliver($job);
-                if ($result === 'succeeded') {
-                    $stats['succeeded']++;
-                } elseif ($result === 'failed') {
-                    $stats['failed']++;
-                } else {
-                    $stats['requeued']++;
-                }
+                $stats[$result] = ($stats[$result] ?? 0) + 1;
             }
-            $this->prune($this->baseDir . '/done', self::DONE_KEEP_COUNT);
-            $this->prune($this->baseDir . '/failed', self::FAILED_KEEP_COUNT);
+            $this->prune(self::BUCKET_DONE, self::DONE_KEEP_COUNT);
+            $this->prune(self::BUCKET_FAILED, self::FAILED_KEEP_COUNT);
         } finally {
             flock($lockHandle, LOCK_UN);
             fclose($lockHandle);
@@ -107,17 +123,9 @@ class WebhookQueue
         return $stats;
     }
 
-    /**
-     * Listet Jobs aus einem Bucket (pending/done/failed).
-     *
-     * @param string $bucket 'pending' | 'done' | 'failed'
-     * @param int    $limit
-     */
     public function list(string $bucket, int $limit = 50): array
     {
-        if (!in_array($bucket, ['pending', 'done', 'failed'], true)) {
-            return [];
-        }
+        if (!in_array($bucket, self::BUCKETS, true)) return [];
         $dir = $this->baseDir . '/' . $bucket;
         if (!is_dir($dir)) return [];
 
@@ -136,12 +144,10 @@ class WebhookQueue
         return $jobs;
     }
 
-    /**
-     * Verschiebt einen Job aus failed/ zurueck nach pending/ mit attempts=0.
-     */
+    /** Verschiebt einen Job aus failed/ zurueck nach pending/ mit attempts=0. */
     public function retry(string $jobId): bool
     {
-        $src = $this->baseDir . '/failed/' . basename($jobId) . '.json';
+        $src = $this->baseDir . '/' . self::BUCKET_FAILED . '/' . basename($jobId) . '.json';
         if (!is_file($src)) return false;
 
         $job = json_decode((string)file_get_contents($src), true);
@@ -151,39 +157,31 @@ class WebhookQueue
         $job['next_run_at'] = time();
         $job['last_error'] = '';
 
-        $this->writeJob($this->baseDir . '/pending/' . $job['id'] . '.json', $job);
+        $this->writeJob($this->baseDir . '/' . self::BUCKET_PENDING . '/' . $job['id'] . '.json', $job);
         @unlink($src);
         return true;
     }
 
-    /**
-     * Loescht einen Job aus einem beliebigen Bucket.
-     */
     public function delete(string $jobId, string $bucket): bool
     {
-        if (!in_array($bucket, ['pending', 'done', 'failed'], true)) return false;
+        if (!in_array($bucket, self::BUCKETS, true)) return false;
         $path = $this->baseDir . '/' . $bucket . '/' . basename($jobId) . '.json';
         if (!is_file($path)) return false;
         return @unlink($path);
     }
 
-    /**
-     * Anzahl Jobs in jedem Bucket – fuer Admin-UI Counts.
-     */
     public function counts(): array
     {
-        return [
-            'pending' => $this->countBucket('pending'),
-            'done' => $this->countBucket('done'),
-            'failed' => $this->countBucket('failed'),
-        ];
+        $out = [];
+        foreach (self::BUCKETS as $b) $out[$b] = $this->countBucket($b);
+        return $out;
     }
 
     // ==================== Intern ====================
 
     private function loadDueJobs(): array
     {
-        $dir = $this->baseDir . '/pending';
+        $dir = $this->baseDir . '/' . self::BUCKET_PENDING;
         $files = glob($dir . '/*.json') ?: [];
 
         $now = time();
@@ -199,10 +197,7 @@ class WebhookQueue
         return array_slice($due, 0, self::MAX_BATCH);
     }
 
-    /**
-     * Versucht eine Zustellung. Verschiebt den Job entsprechend.
-     * @return string 'succeeded' | 'requeued' | 'failed'
-     */
+    /** @return string 'succeeded' | 'requeued' | 'failed' */
     private function deliver(array $job): string
     {
         $id = $job['id'];
@@ -219,17 +214,17 @@ class WebhookQueue
         $job['last_status_code'] = $result['status_code'];
         $job['last_error'] = $result['error'];
 
-        $pendingPath = $this->baseDir . '/pending/' . $id . '.json';
+        $pendingPath = $this->baseDir . '/' . self::BUCKET_PENDING . '/' . $id . '.json';
 
         if ($result['success']) {
             $job['delivered_at'] = time();
-            $this->writeJob($this->baseDir . '/done/' . $id . '.json', $job);
+            $this->writeJob($this->baseDir . '/' . self::BUCKET_DONE . '/' . $id . '.json', $job);
             @unlink($pendingPath);
             return 'succeeded';
         }
 
         if ($attempt >= self::MAX_ATTEMPTS) {
-            $this->writeJob($this->baseDir . '/failed/' . $id . '.json', $job);
+            $this->writeJob($this->baseDir . '/' . self::BUCKET_FAILED . '/' . $id . '.json', $job);
             @unlink($pendingPath);
             error_log("WebhookQueue: job {$id} failed permanently after {$attempt} attempts (funnel={$job['funnel_slug']}, status={$result['status_code']}, err={$result['error']})");
             return 'failed';
@@ -289,13 +284,13 @@ class WebhookQueue
         @chmod($path, 0600);
     }
 
-    private function prune(string $dir, int $keep): void
+    private function prune(string $bucket, int $keep): void
     {
+        $dir = $this->baseDir . '/' . $bucket;
         $files = glob($dir . '/*.json') ?: [];
         if (count($files) <= $keep) return;
         usort($files, fn($a, $b) => filemtime($b) - filemtime($a));
-        $toDelete = array_slice($files, $keep);
-        foreach ($toDelete as $f) @unlink($f);
+        foreach (array_slice($files, $keep) as $f) @unlink($f);
     }
 
     private function countBucket(string $bucket): int
@@ -315,11 +310,10 @@ class WebhookQueue
 
     private function ensureDirs(): void
     {
-        foreach (['', '/pending', '/done', '/failed'] as $sub) {
-            $dir = $this->baseDir . $sub;
-            if (!is_dir($dir)) {
-                @mkdir($dir, 0700, true);
-            }
+        if (!is_dir($this->baseDir)) @mkdir($this->baseDir, 0700, true);
+        foreach (self::BUCKETS as $b) {
+            $dir = $this->baseDir . '/' . $b;
+            if (!is_dir($dir)) @mkdir($dir, 0700, true);
         }
     }
 }

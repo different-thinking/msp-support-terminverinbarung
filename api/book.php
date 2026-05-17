@@ -47,13 +47,6 @@ try {
     $result = $service->book($input);
 
     $status = $result['success'] ? 200 : 422;
-
-    // Probabilistischer Webhook-Worker-Trigger (~5% der Buchungen)
-    if (random_int(1, 20) === 1) {
-        require_once __DIR__ . '/../src/WebhookQueue.php';
-        try { (new WebhookQueue())->processBatch(); } catch (\Throwable $e) { /* nicht stoeren */ }
-    }
-
     jsonResponse($result, $status);
 
 } catch (\Throwable $e) {
