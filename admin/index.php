@@ -890,17 +890,17 @@ foreach ($config['calendar_sources'] as $src) {
                 </p>
             </div>
 
-            <form id="form-funnels" class="admin-card">
+            <div class="admin-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 class="card-section-title" style="margin:0;">Funnels</h3>
+                    <button type="button" id="btn-add-funnel" class="btn btn-primary">
+                        + Neuer Funnel
+                    </button>
+                </div>
                 <div id="funnels-list">
                     <p class="text-muted" id="funnels-empty-hint">Noch keine Funnels angelegt.</p>
                 </div>
-                <button type="button" id="btn-add-funnel" class="btn btn-secondary" style="margin-top:8px;">
-                    + Funnel hinzuf&uuml;gen
-                </button>
-                <div class="form-actions" style="margin-top:16px;">
-                    <button type="submit" class="btn btn-primary">Speichern</button>
-                </div>
-            </form>
+            </div>
 
             <div id="funnel-test-result" style="display:none;" class="admin-card">
                 <h3 class="card-section-title">Test-Ergebnis</h3>
