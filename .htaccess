@@ -12,6 +12,14 @@
 
     # config.php nicht direkt aufrufbar
     RewriteRule ^config\.php$ - [F,L]
+
+    # Hübsche Funnel-URLs: /<slug> -> index.php?termin=<slug>
+    # Greift nur, wenn der Pfad keine echte Datei/Verzeichnis ist (so bleibt
+    # /admin/, /api/, /assets/, /calendar/ usw. erreichbar). Die Allowlist
+    # gegen unbekannte Slugs uebernimmt PHP (FunnelManager).
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([a-z0-9][a-z0-9-]{0,49})/?$ index.php?termin=$1 [L,QSA]
 </IfModule>
 
 # PHP-Fehler nicht im Browser anzeigen (Produktiv)

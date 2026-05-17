@@ -902,48 +902,222 @@
     var funnelsList = document.getElementById('funnels-list');
     var funnelsEmptyHint = document.getElementById('funnels-empty-hint');
     var funnelsLoaded = [];
+    // Pro Row die Funnel-Daten – vermeidet JSON.stringify/parse via dataset und
+    // haelt das Secret aus dem DOM-Inspector raus.
+    var funnelByRow = new WeakMap();
+
+    var MODE_VIEW = 'view';
+    var MODE_EDIT = 'edit';
 
     function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
     function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-    function renderFunnelRow(f) {
-        var slug = escAttr(f.slug || '');
-        var name = escAttr(f.name || '');
-        var url = escAttr(f.webhook_url || '');
-        var secret = escAttr(f.webhook_secret || '');
-        var enabled = f.enabled === false ? '' : 'checked';
+    function funnelUrl(slug) {
+        var configured = document.querySelector('meta[name="app-base-url"]')?.content || '';
+        if (configured) return configured.replace(/\/+$/, '') + '/' + (slug || '');
+        // Fallback: aus dem aktuellen Admin-Pfad ableiten.
+        var base = location.pathname.replace(/admin\/?(index\.php)?$/, '');
+        if (!base.endsWith('/')) base += '/';
+        return location.origin + base + (slug || '');
+    }
+
+    function renderFunnelRow(f, mode) {
         var div = document.createElement('div');
         div.className = 'funnel-row admin-card';
         div.style.marginBottom = '12px';
-        div.innerHTML =
-            '<div class="form-row">' +
-            '  <div class="form-group" style="flex:1;">' +
-            '    <label>Slug <span class="required">*</span></label>' +
-            '    <input type="text" class="f-slug" value="' + slug + '" placeholder="webinar-a" maxlength="50">' +
-            '    <div class="form-hint">URL: <code>?termin=' + (slug || '&lt;slug&gt;') + '</code></div>' +
-            '  </div>' +
-            '  <div class="form-group" style="flex:2;">' +
-            '    <label>Name <span class="required">*</span></label>' +
-            '    <input type="text" class="f-name" value="' + name + '" placeholder="Webinar A – Mai 2026">' +
-            '  </div>' +
-            '</div>' +
-            '<div class="form-group">' +
-            '  <label>Webhook-URL <span class="required">*</span></label>' +
-            '  <input type="url" class="f-url" value="' + url + '" placeholder="https://hooks.example.com/...">' +
-            '</div>' +
-            '<div class="form-group">' +
-            '  <label>HMAC-Secret (optional)</label>' +
-            '  <input type="text" class="f-secret" value="' + secret + '" placeholder="Geheimer Schlüssel für X-Funnel-Signature">' +
-            '</div>' +
-            '<div class="form-row" style="align-items:center;">' +
-            '  <label class="checkbox-label" style="flex:1;">' +
-            '    <input type="checkbox" class="f-enabled" ' + enabled + '>' +
-            '    <span>Aktiviert</span>' +
-            '  </label>' +
-            '  <button type="button" class="btn btn-secondary f-test">Test senden</button>' +
-            '  <button type="button" class="btn btn-secondary f-remove" style="color:var(--error);">Entfernen</button>' +
-            '</div>';
+        div.dataset.mode = mode;
+        div.dataset.originalSlug = f.slug || '';
+        funnelByRow.set(div, f);
+
+        if (mode === MODE_VIEW) {
+            var slug = f.slug || '';
+            var name = f.name || '(unbenannt)';
+            var disabled = f.enabled === false;
+            var url = funnelUrl(slug);
+            div.innerHTML =
+                '<div style="display:flex;align-items:center;gap:16px;">' +
+                '  <div style="flex:1;">' +
+                '    <strong>' + escText(name) + '</strong>' +
+                (disabled ? ' <span style="background:var(--gray-200);color:var(--gray-700);padding:2px 8px;border-radius:4px;font-size:12px;margin-left:8px;">inaktiv</span>' : '') +
+                '    <div class="text-muted" style="font-size:13px;margin-top:4px;">URL: <a href="' + escAttr(url) + '" target="_blank"><code>' + escText(url) + '</code></a></div>' +
+                '  </div>' +
+                '  <div style="display:flex;gap:6px;">' +
+                '    <button type="button" class="btn btn-secondary f-test">Test</button>' +
+                '    <button type="button" class="btn btn-secondary f-edit">Bearbeiten</button>' +
+                '    <button type="button" class="btn btn-secondary f-delete" style="color:var(--error);">L&ouml;schen</button>' +
+                '  </div>' +
+                '</div>';
+        } else {
+            var slugVal = escAttr(f.slug || '');
+            var nameVal = escAttr(f.name || '');
+            var urlVal = escAttr(f.webhook_url || '');
+            var secretVal = escAttr(f.webhook_secret || '');
+            var enabled = f.enabled === false ? '' : 'checked';
+            div.innerHTML =
+                '<div class="form-row">' +
+                '  <div class="form-group" style="flex:1;">' +
+                '    <label>Slug <span class="required">*</span></label>' +
+                '    <input type="text" class="f-slug" value="' + slugVal + '" placeholder="webinar-a" maxlength="50">' +
+                '    <div class="form-hint">URL: <code>' + escText(funnelUrl(slugVal || '<slug>')) + '</code></div>' +
+                '  </div>' +
+                '  <div class="form-group" style="flex:2;">' +
+                '    <label>Name <span class="required">*</span></label>' +
+                '    <input type="text" class="f-name" value="' + nameVal + '" placeholder="Webinar A – Mai 2026">' +
+                '  </div>' +
+                '</div>' +
+                '<div class="form-group">' +
+                '  <label>Webhook-URL <span class="required">*</span></label>' +
+                '  <input type="url" class="f-url" value="' + urlVal + '" placeholder="https://hooks.example.com/...">' +
+                '</div>' +
+                '<div class="form-group">' +
+                '  <label>HMAC-Secret (optional)</label>' +
+                '  <input type="text" class="f-secret" value="' + secretVal + '" placeholder="Geheimer Schl&uuml;ssel f&uuml;r X-Funnel-Signature">' +
+                '</div>' +
+                '<div class="form-row" style="align-items:center;">' +
+                '  <label class="checkbox-label" style="flex:1;">' +
+                '    <input type="checkbox" class="f-enabled" ' + enabled + '>' +
+                '    <span>Aktiviert</span>' +
+                '  </label>' +
+                '  <button type="button" class="btn btn-secondary f-test">Test</button>' +
+                '  <button type="button" class="btn btn-primary f-save">Speichern</button>' +
+                '  <button type="button" class="btn btn-secondary f-cancel">Abbrechen</button>' +
+                '</div>';
+        }
         return div;
+    }
+
+    function isNewRow(row) {
+        return !row.dataset.originalSlug;
+    }
+
+    function readFunnelFromRow(row) {
+        if (row.dataset.mode === MODE_EDIT) {
+            return {
+                slug: row.querySelector('.f-slug').value.trim(),
+                name: row.querySelector('.f-name').value.trim(),
+                webhook_url: row.querySelector('.f-url').value.trim(),
+                webhook_secret: row.querySelector('.f-secret').value,
+                enabled: row.querySelector('.f-enabled').checked,
+            };
+        }
+        return funnelByRow.get(row) || {};
+    }
+
+    function swapRow(oldRow, f, mode) {
+        var newRow = renderFunnelRow(f, mode);
+        oldRow.replaceWith(newRow);
+        bindRowButtons(newRow);
+    }
+
+    function bindRowButtons(row) {
+        var editBtn = row.querySelector('.f-edit');
+        if (editBtn) editBtn.onclick = function () {
+            swapRow(row, funnelByRow.get(row) || {}, MODE_EDIT);
+        };
+
+        var cancelBtn = row.querySelector('.f-cancel');
+        if (cancelBtn) cancelBtn.onclick = function () {
+            if (isNewRow(row)) {
+                row.remove();
+                if (funnelsList.children.length === 0 && funnelsEmptyHint) {
+                    funnelsList.appendChild(funnelsEmptyHint);
+                    funnelsEmptyHint.style.display = '';
+                }
+            } else {
+                swapRow(row, funnelByRow.get(row) || {}, MODE_VIEW);
+            }
+        };
+
+        var saveBtn = row.querySelector('.f-save');
+        if (saveBtn) saveBtn.onclick = function () { saveRow(row); };
+
+        var deleteBtn = row.querySelector('.f-delete');
+        if (deleteBtn) deleteBtn.onclick = function () { deleteRow(row); };
+
+        var testBtn = row.querySelector('.f-test');
+        if (testBtn) testBtn.onclick = function () { testRow(row); };
+    }
+
+    function saveRow(row) {
+        var newF = readFunnelFromRow(row);
+        if (!newF.slug) { showToast('Slug erforderlich', 'error'); return; }
+        if (!newF.name) { showToast('Name erforderlich', 'error'); return; }
+        if (!newF.webhook_url) { showToast('Webhook-URL erforderlich', 'error'); return; }
+
+        var originalSlug = row.dataset.originalSlug || '';
+        var list = funnelsLoaded.slice();
+        if (isNewRow(row)) {
+            list.push(newF);
+        } else {
+            var idx = list.findIndex(function (x) { return x.slug === originalSlug; });
+            if (idx >= 0) list[idx] = newF;
+            else list.push(newF);
+        }
+
+        var btn = row.querySelector('.f-save');
+        var orig = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Speichern...';
+
+        apiPost('funnels-save', { funnels: list }).then(function (res) {
+            btn.disabled = false;
+            btn.textContent = orig;
+            if (res.success) {
+                showToast('Funnel gespeichert');
+                rebuildFunnelsList(res.funnels || list);
+            } else {
+                showToast(res.error || 'Fehler beim Speichern', 'error');
+            }
+        }).catch(function () {
+            btn.disabled = false;
+            btn.textContent = orig;
+            showToast('Verbindungsfehler', 'error');
+        });
+    }
+
+    function deleteRow(row) {
+        if (isNewRow(row)) { row.remove(); return; }
+        var f = funnelByRow.get(row) || {};
+        var originalSlug = row.dataset.originalSlug || '';
+        if (!confirm('Funnel "' + (f.name || originalSlug) + '" wirklich loeschen?')) return;
+
+        var list = funnelsLoaded.filter(function (x) { return x.slug !== originalSlug; });
+        apiPost('funnels-save', { funnels: list }).then(function (res) {
+            if (res.success) {
+                showToast('Funnel geloescht');
+                rebuildFunnelsList(res.funnels || list);
+            } else {
+                showToast(res.error || 'Fehler', 'error');
+            }
+        }).catch(function () { showToast('Verbindungsfehler', 'error'); });
+    }
+
+    function testRow(row) {
+        var data = readFunnelFromRow(row);
+        if (!data.slug || !data.webhook_url) {
+            showToast('Slug und Webhook-URL erforderlich', 'error');
+            return;
+        }
+        var btn = row.querySelector('.f-test');
+        var orig = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sende...';
+
+        apiPost('funnels-test', data).then(function (res) {
+            btn.disabled = false;
+            btn.textContent = orig;
+            var box = document.getElementById('funnel-test-result');
+            var content = document.getElementById('funnel-test-content');
+            box.style.display = 'block';
+            var statusClass = res.success ? 'success' : 'error';
+            var statusText = res.success ? 'Erfolgreich' : 'Fehlgeschlagen';
+            var statusCode = res.status_code ? ' (HTTP ' + res.status_code + ')' : '';
+            var html = '<div class="webhook-test-status ' + statusClass + '">' + statusText + statusCode + '</div>';
+            if (res.error) html += '<p style="color:var(--error);font-size:14px;margin-top:8px;">' + escText(res.error) + '</p>';
+            if (res.response) html += '<div class="webhook-test-response">' + escText(res.response) + '</div>';
+            content.innerHTML = html;
+            showToast(res.success ? 'Funnel-Test erfolgreich' : 'Funnel-Test fehlgeschlagen', res.success ? 'success' : 'error');
+        }).catch(function () { btn.disabled = false; btn.textContent = orig; showToast('Verbindungsfehler', 'error'); });
     }
 
     function rebuildFunnelsList(funnels) {
@@ -955,66 +1129,11 @@
         } else {
             if (funnelsEmptyHint) funnelsEmptyHint.style.display = 'none';
             funnelsLoaded.forEach(function (f) {
-                funnelsList.appendChild(renderFunnelRow(f));
+                var row = renderFunnelRow(f, MODE_VIEW);
+                funnelsList.appendChild(row);
+                bindRowButtons(row);
             });
         }
-        bindFunnelRowButtons();
-    }
-
-    function bindFunnelRowButtons() {
-        funnelsList.querySelectorAll('.f-remove').forEach(function (btn) {
-            btn.onclick = function () {
-                this.closest('.funnel-row').remove();
-            };
-        });
-        funnelsList.querySelectorAll('.f-test').forEach(function (btn) {
-            btn.onclick = function () {
-                var row = this.closest('.funnel-row');
-                var data = {
-                    slug: row.querySelector('.f-slug').value.trim(),
-                    name: row.querySelector('.f-name').value.trim(),
-                    webhook_url: row.querySelector('.f-url').value.trim(),
-                    webhook_secret: row.querySelector('.f-secret').value,
-                };
-                if (!data.slug || !data.webhook_url) {
-                    showToast('Bitte Slug und Webhook-URL ausfuellen', 'error');
-                    return;
-                }
-                var orig = this.textContent;
-                this.disabled = true;
-                this.textContent = 'Sende...';
-                var self = this;
-                apiPost('funnels-test', data).then(function (res) {
-                    self.disabled = false;
-                    self.textContent = orig;
-                    var box = document.getElementById('funnel-test-result');
-                    var content = document.getElementById('funnel-test-content');
-                    box.style.display = 'block';
-                    var statusClass = res.success ? 'success' : 'error';
-                    var statusText = res.success ? 'Erfolgreich' : 'Fehlgeschlagen';
-                    var statusCode = res.status_code ? ' (HTTP ' + res.status_code + ')' : '';
-                    var html = '<div class="webhook-test-status ' + statusClass + '">' + statusText + statusCode + '</div>';
-                    if (res.error) html += '<p style="color:var(--error);font-size:14px;margin-top:8px;">' + escText(res.error) + '</p>';
-                    if (res.response) html += '<div class="webhook-test-response">' + escText(res.response) + '</div>';
-                    content.innerHTML = html;
-                    showToast(res.success ? 'Funnel-Test erfolgreich' : 'Funnel-Test fehlgeschlagen', res.success ? 'success' : 'error');
-                }).catch(function () { self.disabled = false; self.textContent = orig; showToast('Verbindungsfehler', 'error'); });
-            };
-        });
-    }
-
-    function collectFunnelsFromUi() {
-        var list = [];
-        funnelsList.querySelectorAll('.funnel-row').forEach(function (row) {
-            list.push({
-                slug: row.querySelector('.f-slug').value,
-                name: row.querySelector('.f-name').value,
-                webhook_url: row.querySelector('.f-url').value,
-                webhook_secret: row.querySelector('.f-secret').value,
-                enabled: row.querySelector('.f-enabled').checked,
-            });
-        });
-        return list;
     }
 
     function loadFunnels() {
@@ -1029,26 +1148,9 @@
     if (btnAddFunnel) {
         btnAddFunnel.addEventListener('click', function () {
             if (funnelsEmptyHint) funnelsEmptyHint.style.display = 'none';
-            funnelsList.appendChild(renderFunnelRow({ enabled: true }));
-            bindFunnelRowButtons();
-        });
-    }
-
-    var formFunnels = document.getElementById('form-funnels');
-    if (formFunnels) {
-        formFunnels.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var btn = this.querySelector('button[type="submit"]');
-            setLoading(btn, true);
-            apiPost('funnels-save', { funnels: collectFunnelsFromUi() }).then(function (res) {
-                setLoading(btn, false);
-                if (res.success) {
-                    showToast('Funnels gespeichert');
-                    loadFunnels();
-                } else {
-                    showToast(res.error || 'Fehler', 'error');
-                }
-            }).catch(function () { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
+            var row = renderFunnelRow({ enabled: true }, MODE_EDIT);
+            funnelsList.appendChild(row);
+            bindRowButtons(row);
         });
     }
 
@@ -1153,9 +1255,10 @@
         });
     });
 
-    // Auch initial laden (z.B. wenn die Seite direkt mit #funnels geoeffnet wird,
-    // weil der Hash-Click oben vor dem Anhaengen des Click-Listeners passiert).
-    if (funnelsList) {
+    // Initial laden, wenn die Seite direkt mit #funnels geoeffnet wurde –
+    // der Hash-Click oben passiert vor dem Anhaengen der Tab-Listener,
+    // dadurch wuerde sonst nichts gefetcht.
+    if (funnelsList && location.hash === '#funnels') {
         loadFunnels();
         loadQueue('pending');
     }
