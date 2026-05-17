@@ -540,15 +540,22 @@ try {
         case 'funnels-test':
             requirePost($method);
             $input = getJsonInput();
-            $slug = FunnelManager::normalizeSlug($input['slug'] ?? '');
-            if ($slug === null) {
-                jsonResponse(['error' => 'Ungueltiger Slug'], 422);
+
+            // Test arbeitet mit den UI-Werten direkt – kein Persistieren noetig.
+            // So koennen Funnels vor dem Speichern getestet werden.
+            $funnelInput = [
+                'slug' => $input['slug'] ?? '',
+                'name' => $input['name'] ?? ($input['slug'] ?? 'test'),
+                'webhook_url' => $input['webhook_url'] ?? '',
+                'webhook_secret' => $input['webhook_secret'] ?? '',
+                'enabled' => true,
+            ];
+            try {
+                FunnelManager::validateOne($funnelInput);
+            } catch (\InvalidArgumentException $e) {
+                jsonResponse(['error' => $e->getMessage()], 422);
             }
-            $funnels = $cm->getSection('funnels') ?: [];
-            $funnel = FunnelManager::findActive($funnels, $slug);
-            if ($funnel === null) {
-                jsonResponse(['error' => 'Funnel nicht gefunden oder deaktiviert'], 404);
-            }
+            $funnelInput['slug'] = FunnelManager::normalizeSlug($funnelInput['slug']);
 
             require_once __DIR__ . '/../src/BookingService.php';
             $svc = new BookingService();
@@ -572,14 +579,11 @@ try {
             ];
             $payload = $svc->buildWebhookPayload($testBooking, $now, $end, 'https://teams.microsoft.com/test-meeting');
             $payload['event'] = 'booking.test';
-            $payload['funnel'] = ['slug' => $funnel['slug'], 'name' => $funnel['name']];
+            $payload['funnel'] = ['slug' => $funnelInput['slug'], 'name' => $funnelInput['name']];
 
-            $result = $svc->sendWebhookRequest(
-                $funnel['webhook_url'],
-                $payload,
-                (string)($funnel['webhook_secret'] ?? ''),
-                []
-            );
+            // Ueber WebhookQueue::testSend, damit Header und Encoding 1:1 wie
+            // im Echt-Versand sind (insb. X-Funnel-Signature statt X-Webhook-Signature).
+            $result = (new WebhookQueue())->testSend($funnelInput, $payload);
             jsonResponse([
                 'success' => $result['success'],
                 'status_code' => $result['status_code'],
