@@ -19,6 +19,8 @@ session_start();
 require_once __DIR__ . '/../src/ConfigManager.php';
 require_once __DIR__ . '/../src/TokenStore.php';
 require_once __DIR__ . '/../src/SecurityHelper.php';
+require_once __DIR__ . '/../src/FunnelManager.php';
+require_once __DIR__ . '/../src/WebhookQueue.php';
 
 // Konstanten
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -511,6 +513,123 @@ try {
 
             $cm->saveSection('calendar_view', $calView);
             jsonResponse(['success' => true]);
+            break;
+
+        // ==================== Funnels ====================
+        case 'funnels-list':
+            if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
+            jsonResponse(['funnels' => $cm->getSection('funnels') ?: []]);
+            break;
+
+        case 'funnels-save':
+            requirePost($method);
+            $input = getJsonInput();
+            $rawList = $input['funnels'] ?? [];
+            if (!is_array($rawList)) {
+                jsonResponse(['error' => 'Funnels muss ein Array sein'], 400);
+            }
+            try {
+                $normalized = FunnelManager::normalizeList($rawList);
+                $cm->saveSection('funnels', $normalized);
+            } catch (\InvalidArgumentException $e) {
+                jsonResponse(['error' => $e->getMessage()], 422);
+            }
+            jsonResponse(['success' => true, 'funnels' => $normalized]);
+            break;
+
+        case 'funnels-test':
+            requirePost($method);
+            $input = getJsonInput();
+            $slug = FunnelManager::normalizeSlug($input['slug'] ?? '');
+            if ($slug === null) {
+                jsonResponse(['error' => 'Ungueltiger Slug'], 422);
+            }
+            $funnels = $cm->getSection('funnels') ?: [];
+            $funnel = FunnelManager::findActive($funnels, $slug);
+            if ($funnel === null) {
+                jsonResponse(['error' => 'Funnel nicht gefunden oder deaktiviert'], 404);
+            }
+
+            require_once __DIR__ . '/../src/BookingService.php';
+            $svc = new BookingService();
+            $tz = new \DateTimeZone($svc->getConfig()['app']['timezone'] ?? 'Europe/Berlin');
+            $now = new \DateTime('now', $tz);
+            $end = clone $now;
+            $end->modify('+60 minutes');
+
+            $testFields = [];
+            foreach ($svc->getConfig()['booking_form']['additional_fields'] ?? [] as $f) {
+                if (!empty($f['name'])) $testFields[$f['name']] = $f['name'];
+            }
+            $testBooking = [
+                'date' => $now->format('Y-m-d'),
+                'time' => $now->format('H:i'),
+                'firstname' => 'Test',
+                'lastname' => 'Funnel',
+                'email' => 'test@example.com',
+                'fields' => $testFields,
+                'additional_attendees' => [],
+            ];
+            $payload = $svc->buildWebhookPayload($testBooking, $now, $end, 'https://teams.microsoft.com/test-meeting');
+            $payload['event'] = 'booking.test';
+            $payload['funnel'] = ['slug' => $funnel['slug'], 'name' => $funnel['name']];
+
+            $result = $svc->sendWebhookRequest(
+                $funnel['webhook_url'],
+                $payload,
+                (string)($funnel['webhook_secret'] ?? ''),
+                []
+            );
+            jsonResponse([
+                'success' => $result['success'],
+                'status_code' => $result['status_code'],
+                'response' => $result['response'],
+                'error' => $result['error'],
+            ]);
+            break;
+
+        // ==================== Webhook-Queue ====================
+        case 'webhook-queue':
+            if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
+            $bucket = $_GET['bucket'] ?? WebhookQueue::BUCKET_PENDING;
+            if (!in_array($bucket, WebhookQueue::BUCKETS, true)) $bucket = WebhookQueue::BUCKET_PENDING;
+            $queue = new WebhookQueue();
+            $jobs = $queue->list($bucket, 50);
+            // Secrets nie an Frontend zurueckgeben
+            foreach ($jobs as &$j) {
+                if (isset($j['secret'])) $j['secret'] = $j['secret'] === '' ? '' : '***';
+            }
+            unset($j);
+            jsonResponse([
+                'jobs' => $jobs,
+                'counts' => $queue->counts(),
+            ]);
+            break;
+
+        case 'webhook-queue-retry':
+            requirePost($method);
+            $input = getJsonInput();
+            $jobId = (string)($input['id'] ?? '');
+            $queue = new WebhookQueue();
+            $ok = $queue->retry($jobId);
+            jsonResponse(['success' => $ok]);
+            break;
+
+        case 'webhook-queue-delete':
+            requirePost($method);
+            $input = getJsonInput();
+            $jobId = (string)($input['id'] ?? '');
+            $bucket = (string)($input['bucket'] ?? '');
+            $queue = new WebhookQueue();
+            $ok = $queue->delete($jobId, $bucket);
+            jsonResponse(['success' => $ok]);
+            break;
+
+        case 'webhook-queue-run':
+            requirePost($method);
+            $queue = new WebhookQueue();
+            $stats = $queue->processBatch();
+            jsonResponse(['success' => true, 'stats' => $stats]);
             break;
 
         // ==================== Admin-Passwort ====================

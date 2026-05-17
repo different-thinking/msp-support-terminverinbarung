@@ -897,6 +897,254 @@
         });
     }
 
+    // ==================== Funnels ====================
+
+    var funnelsList = document.getElementById('funnels-list');
+    var funnelsEmptyHint = document.getElementById('funnels-empty-hint');
+    var funnelsLoaded = [];
+
+    function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+    function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function renderFunnelRow(f) {
+        var slug = escAttr(f.slug || '');
+        var name = escAttr(f.name || '');
+        var url = escAttr(f.webhook_url || '');
+        var secret = escAttr(f.webhook_secret || '');
+        var enabled = f.enabled === false ? '' : 'checked';
+        var div = document.createElement('div');
+        div.className = 'funnel-row admin-card';
+        div.style.marginBottom = '12px';
+        div.innerHTML =
+            '<div class="form-row">' +
+            '  <div class="form-group" style="flex:1;">' +
+            '    <label>Slug <span class="required">*</span></label>' +
+            '    <input type="text" class="f-slug" value="' + slug + '" placeholder="webinar-a" maxlength="50">' +
+            '    <div class="form-hint">URL: <code>?funnel=' + (slug || '&lt;slug&gt;') + '</code></div>' +
+            '  </div>' +
+            '  <div class="form-group" style="flex:2;">' +
+            '    <label>Name <span class="required">*</span></label>' +
+            '    <input type="text" class="f-name" value="' + name + '" placeholder="Webinar A – Mai 2026">' +
+            '  </div>' +
+            '</div>' +
+            '<div class="form-group">' +
+            '  <label>Webhook-URL <span class="required">*</span></label>' +
+            '  <input type="url" class="f-url" value="' + url + '" placeholder="https://hooks.example.com/...">' +
+            '</div>' +
+            '<div class="form-group">' +
+            '  <label>HMAC-Secret (optional)</label>' +
+            '  <input type="text" class="f-secret" value="' + secret + '" placeholder="Geheimer Schlüssel für X-Funnel-Signature">' +
+            '</div>' +
+            '<div class="form-row" style="align-items:center;">' +
+            '  <label class="checkbox-label" style="flex:1;">' +
+            '    <input type="checkbox" class="f-enabled" ' + enabled + '>' +
+            '    <span>Aktiviert</span>' +
+            '  </label>' +
+            '  <button type="button" class="btn btn-secondary f-test">Test senden</button>' +
+            '  <button type="button" class="btn btn-secondary f-remove" style="color:var(--error);">Entfernen</button>' +
+            '</div>';
+        return div;
+    }
+
+    function rebuildFunnelsList(funnels) {
+        funnelsLoaded = funnels || [];
+        funnelsList.innerHTML = '';
+        if (funnelsLoaded.length === 0) {
+            funnelsList.appendChild(funnelsEmptyHint);
+            funnelsEmptyHint.style.display = '';
+        } else {
+            if (funnelsEmptyHint) funnelsEmptyHint.style.display = 'none';
+            funnelsLoaded.forEach(function (f) {
+                funnelsList.appendChild(renderFunnelRow(f));
+            });
+        }
+        bindFunnelRowButtons();
+    }
+
+    function bindFunnelRowButtons() {
+        funnelsList.querySelectorAll('.f-remove').forEach(function (btn) {
+            btn.onclick = function () {
+                this.closest('.funnel-row').remove();
+            };
+        });
+        funnelsList.querySelectorAll('.f-test').forEach(function (btn) {
+            btn.onclick = function () {
+                var row = this.closest('.funnel-row');
+                var slug = row.querySelector('.f-slug').value.trim();
+                if (!slug) { showToast('Bitte zuerst Slug speichern', 'error'); return; }
+                var orig = this.textContent;
+                this.disabled = true;
+                this.textContent = 'Sende...';
+                var self = this;
+                apiPost('funnels-test', { slug: slug }).then(function (res) {
+                    self.disabled = false;
+                    self.textContent = orig;
+                    var box = document.getElementById('funnel-test-result');
+                    var content = document.getElementById('funnel-test-content');
+                    box.style.display = 'block';
+                    var statusClass = res.success ? 'success' : 'error';
+                    var statusText = res.success ? 'Erfolgreich' : 'Fehlgeschlagen';
+                    var statusCode = res.status_code ? ' (HTTP ' + res.status_code + ')' : '';
+                    var html = '<div class="webhook-test-status ' + statusClass + '">' + statusText + statusCode + '</div>';
+                    if (res.error) html += '<p style="color:var(--error);font-size:14px;margin-top:8px;">' + escText(res.error) + '</p>';
+                    if (res.response) html += '<div class="webhook-test-response">' + escText(res.response) + '</div>';
+                    content.innerHTML = html;
+                    showToast(res.success ? 'Funnel-Test erfolgreich' : 'Funnel-Test fehlgeschlagen', res.success ? 'success' : 'error');
+                }).catch(function () { self.disabled = false; self.textContent = orig; showToast('Verbindungsfehler', 'error'); });
+            };
+        });
+    }
+
+    function collectFunnelsFromUi() {
+        var list = [];
+        funnelsList.querySelectorAll('.funnel-row').forEach(function (row) {
+            list.push({
+                slug: row.querySelector('.f-slug').value,
+                name: row.querySelector('.f-name').value,
+                webhook_url: row.querySelector('.f-url').value,
+                webhook_secret: row.querySelector('.f-secret').value,
+                enabled: row.querySelector('.f-enabled').checked,
+            });
+        });
+        return list;
+    }
+
+    function loadFunnels() {
+        if (!funnelsList) return;
+        fetch('api.php?action=funnels-list')
+            .then(function (r) { return r.json(); })
+            .then(function (res) { rebuildFunnelsList(res.funnels || []); })
+            .catch(function () { showToast('Konnte Funnels nicht laden', 'error'); });
+    }
+
+    var btnAddFunnel = document.getElementById('btn-add-funnel');
+    if (btnAddFunnel) {
+        btnAddFunnel.addEventListener('click', function () {
+            if (funnelsEmptyHint) funnelsEmptyHint.style.display = 'none';
+            funnelsList.appendChild(renderFunnelRow({ enabled: true }));
+            bindFunnelRowButtons();
+        });
+    }
+
+    var formFunnels = document.getElementById('form-funnels');
+    if (formFunnels) {
+        formFunnels.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+            apiPost('funnels-save', { funnels: collectFunnelsFromUi() }).then(function (res) {
+                setLoading(btn, false);
+                if (res.success) {
+                    showToast('Funnels gespeichert');
+                    rebuildFunnelsList(res.funnels || []);
+                } else {
+                    showToast(res.error || 'Fehler', 'error');
+                }
+            }).catch(function () { setLoading(btn, false); showToast('Verbindungsfehler', 'error'); });
+        });
+    }
+
+    // ==================== Webhook-Queue (innerhalb Funnels-Tab) ====================
+
+    var currentBucket = 'pending';
+    function loadQueue(bucket) {
+        currentBucket = bucket || currentBucket;
+        var listEl = document.getElementById('funnel-queue-list');
+        if (!listEl) return;
+        listEl.innerHTML = '<p class="text-muted">Lade&hellip;</p>';
+        fetch('api.php?action=webhook-queue&bucket=' + encodeURIComponent(currentBucket))
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var counts = res.counts || { pending: 0, done: 0, failed: 0 };
+                ['pending', 'done', 'failed'].forEach(function (b) {
+                    var el = document.querySelector('.funnel-queue-tab [data-count="' + b + '"]');
+                    if (el) el.textContent = counts[b] || 0;
+                });
+                var jobs = res.jobs || [];
+                if (jobs.length === 0) {
+                    listEl.innerHTML = '<p class="text-muted">Keine Eintr&auml;ge in diesem Bucket.</p>';
+                    return;
+                }
+                var html = '<table class="admin-table" style="width:100%;font-size:13px;">' +
+                    '<thead><tr><th>Funnel</th><th>Versuche</th><th>Letzter Status</th><th>N&auml;chster Versuch</th><th></th></tr></thead><tbody>';
+                jobs.forEach(function (j) {
+                    var nextRun = j.next_run_at ? new Date(j.next_run_at * 1000).toLocaleString() : '-';
+                    var status = j.last_status_code ? ('HTTP ' + j.last_status_code) : '-';
+                    if (j.last_error) status += ' &middot; ' + escText(j.last_error).slice(0, 80);
+                    var actions = '';
+                    if (currentBucket === 'failed') {
+                        actions += '<button type="button" class="btn btn-secondary btn-q-retry" data-id="' + escAttr(j.id) + '">Erneut</button> ';
+                    }
+                    actions += '<button type="button" class="btn btn-secondary btn-q-delete" data-id="' + escAttr(j.id) + '" data-bucket="' + currentBucket + '" style="color:var(--error);">L&ouml;schen</button>';
+                    html += '<tr>' +
+                        '<td>' + escText(j.funnel_slug || '-') + '</td>' +
+                        '<td>' + (j.attempts || 0) + '</td>' +
+                        '<td>' + status + '</td>' +
+                        '<td>' + escText(nextRun) + '</td>' +
+                        '<td>' + actions + '</td>' +
+                    '</tr>';
+                });
+                html += '</tbody></table>';
+                listEl.innerHTML = html;
+
+                listEl.querySelectorAll('.btn-q-retry').forEach(function (b) {
+                    b.onclick = function () {
+                        apiPost('webhook-queue-retry', { id: this.dataset.id }).then(function (r) {
+                            if (r.success) { showToast('Job neu in Queue'); loadQueue(); }
+                            else showToast('Fehler', 'error');
+                        });
+                    };
+                });
+                listEl.querySelectorAll('.btn-q-delete').forEach(function (b) {
+                    b.onclick = function () {
+                        if (!confirm('Job wirklich l&ouml;schen?')) return;
+                        apiPost('webhook-queue-delete', { id: this.dataset.id, bucket: this.dataset.bucket }).then(function (r) {
+                            if (r.success) { showToast('Gel&ouml;scht'); loadQueue(); }
+                            else showToast('Fehler', 'error');
+                        });
+                    };
+                });
+            })
+            .catch(function () { listEl.innerHTML = '<p class="text-muted">Fehler beim Laden.</p>'; });
+    }
+
+    document.querySelectorAll('.funnel-queue-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.funnel-queue-tab').forEach(function (t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            loadQueue(this.dataset.bucket);
+        });
+    });
+
+    var btnRunQueue = document.getElementById('btn-run-queue');
+    if (btnRunQueue) {
+        btnRunQueue.addEventListener('click', function () {
+            var orig = this.textContent;
+            this.disabled = true;
+            this.textContent = 'Verarbeite...';
+            var self = this;
+            apiPost('webhook-queue-run', {}).then(function (res) {
+                self.disabled = false;
+                self.textContent = orig;
+                if (res.success) {
+                    var s = res.stats || {};
+                    showToast('Verarbeitet: ' + (s.processed || 0) + ' (' + (s.succeeded || 0) + ' OK, ' + (s.requeued || 0) + ' requeued, ' + (s.failed || 0) + ' failed)');
+                    loadQueue();
+                } else {
+                    showToast('Fehler', 'error');
+                }
+            }).catch(function () { self.disabled = false; self.textContent = orig; showToast('Verbindungsfehler', 'error'); });
+        });
+    }
+
+    // Beim Wechsel auf den Funnels-Tab Daten laden
+    document.querySelectorAll('.nav-item[data-tab="funnels"]').forEach(function (a) {
+        a.addEventListener('click', function () {
+            loadFunnels();
+            loadQueue('pending');
+        });
+    });
+
     // ==================== ESC schließt Modals ====================
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeSourceModal();

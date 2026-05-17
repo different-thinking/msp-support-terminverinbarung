@@ -5,6 +5,8 @@ require_once __DIR__ . '/CalendarServiceInterface.php';
 require_once __DIR__ . '/MicrosoftCalendarService.php';
 require_once __DIR__ . '/GoogleCalendarService.php';
 require_once __DIR__ . '/AvailabilityEngine.php';
+require_once __DIR__ . '/FunnelManager.php';
+require_once __DIR__ . '/WebhookQueue.php';
 
 /**
  * Haupt-Service für die Terminbuchung.
@@ -152,8 +154,11 @@ class BookingService
         // Informationsmail an Kalenderinhaber senden
         $this->sendOwnerNotification($bookingTarget, $bookingData, $start, $end, $teamsLink);
 
-        // Webhook auslösen
-        $this->fireWebhook($bookingData, $start, $end, $teamsLink);
+        // Webhook: bei Funnel-Match nur den Funnel-Webhook (sync mit Retry),
+        // sonst den globalen Webhook (legacy).
+        if (!$this->dispatchFunnelWebhook($bookingData, $start, $end, $teamsLink)) {
+            $this->fireWebhook($bookingData, $start, $end, $teamsLink);
+        }
 
         return [
             'success' => true,
@@ -410,6 +415,50 @@ class BookingService
         $html .= '</div>';
 
         return $html;
+    }
+
+    /**
+     * Wenn die Buchung einem aktiven Funnel zugeordnet ist, wird der
+     * Funnel-Webhook synchron versucht – schlaegt der Aufruf fehl,
+     * wandert der Job in die Retry-Queue.
+     *
+     * @return bool true wenn ein Funnel zugeordnet wurde (egal ob HTTP-Erfolg
+     *              oder Queue-Fallback); false wenn kein Funnel matched
+     *              (Caller faellt dann auf den globalen Webhook zurueck).
+     */
+    private function dispatchFunnelWebhook(
+        array $bookingData,
+        \DateTime $start,
+        \DateTime $end,
+        string $teamsLink
+    ): bool {
+        $rawSlug = $bookingData['funnel'] ?? '';
+        $slug = FunnelManager::normalizeSlug(is_string($rawSlug) ? $rawSlug : '');
+        if ($slug === null) return false;
+
+        $funnel = FunnelManager::findActive($this->config['funnels'] ?? [], $slug);
+        if ($funnel === null) return false;
+
+        $payload = $this->buildWebhookPayload($bookingData, $start, $end, $teamsLink);
+        $payload['event'] = 'booking.created';
+        $payload['funnel'] = [
+            'slug' => $funnel['slug'],
+            'name' => $funnel['name'],
+        ];
+
+        try {
+            $result = (new WebhookQueue())->dispatch($funnel, $payload);
+            if (!empty($result['enqueued'])) {
+                SecurityHelper::logError(
+                    'FunnelWebhook',
+                    "Direct dispatch failed (slug={$funnel['slug']}, http={$result['status_code']}, err={$result['error']}) – queued for retry"
+                );
+            }
+        } catch (\Throwable $e) {
+            SecurityHelper::logError('FunnelWebhook', 'Dispatch failed', $e);
+        }
+
+        return true;
     }
 
     /**

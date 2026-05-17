@@ -171,6 +171,9 @@ foreach ($config['calendar_sources'] as $src) {
             <a href="#" class="nav-item" data-tab="webhook">
                 <span class="nav-icon">&#128268;</span> Webhook
             </a>
+            <a href="#" class="nav-item" data-tab="funnels">
+                <span class="nav-icon">&#128200;</span> Funnels
+            </a>
             <a href="#" class="nav-item" data-tab="embed">
                 <span class="nav-icon">&#128444;</span> Einbetten
             </a>
@@ -752,7 +755,10 @@ foreach ($config['calendar_sources'] as $src) {
         <section id="tab-webhook" class="tab-content">
             <div class="tab-header">
                 <h1>Webhook</h1>
-                <p>Nach jeder Buchung einen HTTP-Request an einen externen Service senden</p>
+                <p>Nach jeder Buchung einen HTTP-Request an einen externen Service senden.
+                   <strong>Hinweis:</strong> Wenn eine Buchung einem Funnel zugeordnet ist
+                   (Tab &bdquo;Funnels&ldquo;), wird stattdessen dessen Webhook gefeuert &ndash;
+                   dieser globale Webhook fungiert als Fallback fuer Buchungen ohne Funnel.</p>
             </div>
 
             <?php $webhookConfig = $config['webhook'] ?? ['enabled' => false, 'url' => '', 'secret' => '', 'headers' => []]; ?>
@@ -860,6 +866,58 @@ foreach ($config['calendar_sources'] as $src) {
             <div id="webhook-test-result" style="display:none;" class="admin-card">
                 <h3 class="card-section-title">Test-Ergebnis</h3>
                 <div id="webhook-test-content"></div>
+            </div>
+        </section>
+
+        <!-- ==================== Tab: Funnels ==================== -->
+        <section id="tab-funnels" class="tab-content">
+            <div class="tab-header">
+                <h1>Funnels</h1>
+                <p>Pro Funnel ein eigener Webhook nach jeder Buchung &ndash; mit Allowlist, asynchroner Zustellung und Retry &uuml;ber 24h.</p>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">So funktioniert&apos;s</h3>
+                <p class="text-muted" style="margin-bottom:8px;">
+                    Lege f&uuml;r jeden Funnel einen Slug an (z.B. <code>webinar-a</code>). Rufe die Buchungsseite mit
+                    <code>?funnel=webinar-a</code> auf &ndash; nur bekannte und aktivierte Slugs werden &uuml;bernommen.
+                    Nach jeder erfolgreichen Buchung wird der zugeh&ouml;rige Webhook in eine Queue eingestellt und mit
+                    Retry zugestellt (10 Versuche, Backoff: 1m / 5m / 15m / 30m / 1h / 2h / 4h / 8h / 12h / 24h).
+                </p>
+                <p class="text-muted">
+                    <strong>Slug-Format:</strong> Kleinbuchstaben, Ziffern und Bindestriche (1-50 Zeichen).<br>
+                    <strong>HMAC-Secret:</strong> wird optional als <code>X-Funnel-Signature: sha256=&hellip;</code> Header mitgeschickt.
+                </p>
+            </div>
+
+            <form id="form-funnels" class="admin-card">
+                <div id="funnels-list">
+                    <p class="text-muted" id="funnels-empty-hint">Noch keine Funnels angelegt.</p>
+                </div>
+                <button type="button" id="btn-add-funnel" class="btn btn-secondary" style="margin-top:8px;">
+                    + Funnel hinzuf&uuml;gen
+                </button>
+                <div class="form-actions" style="margin-top:16px;">
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+
+            <div id="funnel-test-result" style="display:none;" class="admin-card">
+                <h3 class="card-section-title">Test-Ergebnis</h3>
+                <div id="funnel-test-content"></div>
+            </div>
+
+            <div class="admin-card">
+                <h3 class="card-section-title">Zustell-Queue</h3>
+                <div class="funnels-queue-tabs" style="margin-bottom:12px;">
+                    <button type="button" class="btn btn-secondary funnel-queue-tab active" data-bucket="pending">Ausstehend (<span data-count="pending">0</span>)</button>
+                    <button type="button" class="btn btn-secondary funnel-queue-tab" data-bucket="done">Zugestellt (<span data-count="done">0</span>)</button>
+                    <button type="button" class="btn btn-secondary funnel-queue-tab" data-bucket="failed">Fehlgeschlagen (<span data-count="failed">0</span>)</button>
+                    <button type="button" id="btn-run-queue" class="btn btn-secondary" style="float:right;">Jetzt verarbeiten</button>
+                </div>
+                <div id="funnel-queue-list">
+                    <p class="text-muted">Lade&hellip;</p>
+                </div>
             </div>
         </section>
 
