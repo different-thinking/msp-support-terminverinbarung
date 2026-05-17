@@ -1470,7 +1470,7 @@ function copyText(id) {
     });
 }
 </script>
-<script src="../assets/js/admin.js"></script>
+<script src="../assets/js/admin.js?v=<?= filemtime(__DIR__ . '/../assets/js/admin.js') ?>"></script>
 <?php endif; ?>
 </body>
 </html>
