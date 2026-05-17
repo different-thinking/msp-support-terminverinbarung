@@ -4,11 +4,22 @@
  * Optimiert für die Einbettung in externe Webseiten.
  */
 require_once __DIR__ . '/src/SecurityHelper.php';
+require_once __DIR__ . '/src/FunnelManager.php';
 SecurityHelper::sendSecurityHeaders(allowFrame: true);
 // CSP: Erlaubt iframe-Einbettung von beliebigen Domains (oeffentliches Widget)
 header("Content-Security-Policy: frame-ancestors *");
 
 $config = require __DIR__ . '/config.php';
+
+// Funnel aus URL gegen Allowlist pruefen; nur bekannte und aktive Slugs durchreichen.
+$activeFunnelSlug = '';
+$rawFunnel = $_GET['funnel'] ?? null;
+if (is_string($rawFunnel)) {
+    $candidate = FunnelManager::normalizeSlug($rawFunnel);
+    if ($candidate !== null && FunnelManager::findActive($config['funnels'] ?? [], $candidate) !== null) {
+        $activeFunnelSlug = $candidate;
+    }
+}
 
 /** Wandelt **text** in <strong>text</strong> um (nach htmlspecialchars). */
 function formatText(string $text): string {

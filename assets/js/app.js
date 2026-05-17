@@ -513,6 +513,11 @@
             additional_attendees: getAttendeeEmails(),
         };
 
+        const funnelInput = $('#field-funnel');
+        if (funnelInput && funnelInput.value) {
+            data.funnel = funnelInput.value;
+        }
+
         fetch('api/book.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

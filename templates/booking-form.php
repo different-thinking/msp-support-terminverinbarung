@@ -13,6 +13,10 @@
  */
 ?>
 
+    <?php if (!empty($activeFunnelSlug)): ?>
+    <input type="hidden" id="field-funnel" value="<?= htmlspecialchars($activeFunnelSlug) ?>">
+    <?php endif; ?>
+
     <!-- Schrittanzeige -->
     <div class="booking-steps">
         <div class="step active" data-step="1">
