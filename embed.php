@@ -21,6 +21,26 @@ if (is_string($rawFunnel)) {
     }
 }
 
+// Optionale Vorbefuellung des Formulars per URL-Parameter (firstname, lastname, email).
+$prefillFirstname = '';
+$prefillLastname = '';
+$prefillEmail = '';
+$rawFirstname = $_GET['firstname'] ?? $_GET['vorname'] ?? null;
+if (is_string($rawFirstname)) {
+    $prefillFirstname = mb_substr(trim($rawFirstname), 0, 100);
+}
+$rawLastname = $_GET['lastname'] ?? $_GET['nachname'] ?? null;
+if (is_string($rawLastname)) {
+    $prefillLastname = mb_substr(trim($rawLastname), 0, 100);
+}
+$rawEmail = $_GET['email'] ?? null;
+if (is_string($rawEmail)) {
+    $candidateEmail = mb_substr(trim($rawEmail), 0, 254);
+    if (filter_var($candidateEmail, FILTER_VALIDATE_EMAIL)) {
+        $prefillEmail = $candidateEmail;
+    }
+}
+
 /** Wandelt **text** in <strong>text</strong> um (nach htmlspecialchars). */
 function formatText(string $text): string {
     $safe = htmlspecialchars($text);
