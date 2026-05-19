@@ -4,6 +4,7 @@
  */
 require_once __DIR__ . '/src/SecurityHelper.php';
 require_once __DIR__ . '/src/FunnelManager.php';
+require_once __DIR__ . '/src/RequestPrefill.php';
 SecurityHelper::sendSecurityHeaders();
 
 $config = require __DIR__ . '/config.php';
@@ -17,6 +18,8 @@ if (is_string($rawFunnel)) {
         $activeFunnelSlug = $candidate;
     }
 }
+
+$prefill = RequestPrefill::parse($_GET);
 
 /** Wandelt **text** in <strong>text</strong> um (nach htmlspecialchars). */
 function formatText(string $text): string {
