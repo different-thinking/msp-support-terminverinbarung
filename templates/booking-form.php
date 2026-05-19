@@ -10,13 +10,8 @@
  * - $maxAttendees (int)
  * - $organizerName (string)
  * - $bookingInfo (string, optional) – nur in index.php gesetzt
- * - $prefillFirstname (string, optional)
- * - $prefillLastname (string, optional)
- * - $prefillEmail (string, optional)
+ * - $prefill (array{firstname: string, lastname: string, email: string})
  */
-$prefillFirstname = $prefillFirstname ?? '';
-$prefillLastname = $prefillLastname ?? '';
-$prefillEmail = $prefillEmail ?? '';
 ?>
 
     <?php if (!empty($activeFunnelSlug)): ?>
@@ -77,19 +72,19 @@ $prefillEmail = $prefillEmail ?? '';
         <div class="form-row">
             <div class="form-group">
                 <label for="field-firstname">Vorname <span class="required">*</span></label>
-                <input type="text" id="field-firstname" name="firstname" required placeholder="Ihr Vorname" maxlength="100" value="<?= htmlspecialchars($prefillFirstname) ?>">
+                <input type="text" id="field-firstname" name="firstname" required placeholder="Ihr Vorname" maxlength="100" value="<?= htmlspecialchars($prefill['firstname']) ?>">
                 <div class="form-error"></div>
             </div>
             <div class="form-group">
                 <label for="field-lastname">Nachname <span class="required">*</span></label>
-                <input type="text" id="field-lastname" name="lastname" required placeholder="Ihr Nachname" maxlength="100" value="<?= htmlspecialchars($prefillLastname) ?>">
+                <input type="text" id="field-lastname" name="lastname" required placeholder="Ihr Nachname" maxlength="100" value="<?= htmlspecialchars($prefill['lastname']) ?>">
                 <div class="form-error"></div>
             </div>
         </div>
 
         <div class="form-group">
             <label for="field-email">E-Mail-Adresse <span class="required">*</span></label>
-            <input type="email" id="field-email" name="email" required placeholder="ihre@email.de" maxlength="254" value="<?= htmlspecialchars($prefillEmail) ?>">
+            <input type="email" id="field-email" name="email" required placeholder="ihre@email.de" maxlength="254" value="<?= htmlspecialchars($prefill['email']) ?>">
             <div class="form-error"></div>
         </div>
 
