@@ -3,6 +3,13 @@
  * OAuth2 Callback für Google Calendar.
  * Empfängt den Authorization Code und tauscht ihn gegen Tokens.
  */
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+session_set_cookie_params([
+    'httponly' => true,
+    'secure' => $isHttps,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 require_once __DIR__ . '/../src/BookingService.php';
