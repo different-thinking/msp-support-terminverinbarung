@@ -40,10 +40,10 @@ class TokenStore
      */
     public function set(string $sourceId, array $tokenData): bool
     {
-        // Vor dem Schreiben neu laden um Race-Conditions zu minimieren
-        $this->tokens = $this->loadWithLock();
-        $this->tokens[$sourceId] = $tokenData;
-        return $this->save();
+        return $this->mutate(function (array &$tokens) use ($sourceId, $tokenData): bool {
+            $tokens[$sourceId] = $tokenData;
+            return true;
+        });
     }
 
     /**
@@ -52,9 +52,10 @@ class TokenStore
      */
     public function remove(string $sourceId): bool
     {
-        $this->tokens = $this->loadWithLock();
-        unset($this->tokens[$sourceId]);
-        return $this->save();
+        return $this->mutate(function (array &$tokens) use ($sourceId): bool {
+            unset($tokens[$sourceId]);
+            return true;
+        });
     }
 
     /**
@@ -72,13 +73,14 @@ class TokenStore
      */
     public function markRefreshFailed(string $sourceId, string $reason): bool
     {
-        $this->tokens = $this->loadWithLock();
-        if (!isset($this->tokens[$sourceId])) {
-            return true; // Quelle wurde zwischenzeitlich getrennt
-        }
-        $this->tokens[$sourceId]['refresh_failed_at'] = time();
-        $this->tokens[$sourceId]['refresh_failed_reason'] = $reason;
-        return $this->save();
+        return $this->mutate(function (array &$tokens) use ($sourceId, $reason): bool {
+            if (!isset($tokens[$sourceId])) {
+                return false; // Quelle wurde zwischenzeitlich getrennt
+            }
+            $tokens[$sourceId]['refresh_failed_at'] = time();
+            $tokens[$sourceId]['refresh_failed_reason'] = $reason;
+            return true;
+        });
     }
 
     /**
@@ -111,10 +113,74 @@ class TokenStore
     }
 
     /**
-     * Liest die Token-Datei mit Shared-Lock. Gegen halbe Schreibvorgaenge
-     * schuetzt inzwischen save() selbst; der Lock haelt zusaetzlich Leser und
-     * Schreiber auseinander, solange nach einem Deploy noch alte Prozesse
-     * ohne atomares Schreiben laufen.
+     * Fuehrt eine Aenderung unter exklusiver Sperre aus: neu laden, aendern,
+     * speichern. Der gesamte Zyklus liegt innerhalb der Sperre, denn sonst
+     * koennten zwei Prozesse denselben Stand laden und der zweite den ersten
+     * ueberschreiben – ein rotiertes Refresh-Token waere weg.
+     *
+     * @param callable $mutator Erhaelt die Tokens als Referenz und gibt
+     *                          zurueck, ob ueberhaupt etwas zu speichern ist.
+     */
+    private function mutate(callable $mutator): bool
+    {
+        $lock = $this->acquireLock();
+        if ($lock === null) {
+            SecurityHelper::logError(
+                'TokenStore',
+                'Keine Sperre fuer ' . $this->path . ' erhaltbar – Aenderung verworfen.'
+            );
+            return false;
+        }
+
+        try {
+            // Innerhalb der Sperre ohne weiteres flock() lesen und schreiben:
+            // ein zweiter Lock auf dieselbe Datei im selben Prozess wuerde sich
+            // gegen den bereits gehaltenen sperren.
+            $this->tokens = $this->readTokens();
+
+            if (!$mutator($this->tokens)) {
+                return true; // nichts zu tun ist kein Fehlschlag
+            }
+
+            return $this->save();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    /**
+     * Oeffnet die exklusive Sperre fuer einen Schreibzyklus.
+     *
+     * Bevorzugt wird eine eigene Lock-Datei: die Token-Datei selbst wird von
+     * saveAtomically() per rename() ersetzt, eine Sperre darauf haette danach
+     * keine Wirkung mehr. Laesst sich die Lock-Datei nicht anlegen, ist das
+     * Verzeichnis nicht beschreibbar – dann schreibt save() ohnehin in-place
+     * und die Token-Datei ist selbst ein stabiler Sperrpunkt.
+     *
+     * @return resource|null
+     */
+    private function acquireLock()
+    {
+        $fh = @fopen($this->path . '.lock', 'cb');
+        if ($fh === false) {
+            $fh = @fopen($this->path, 'cb');
+        }
+        if ($fh === false) {
+            return null;
+        }
+
+        if (!flock($fh, LOCK_EX)) {
+            fclose($fh);
+            return null;
+        }
+
+        return $fh;
+    }
+
+    /**
+     * Liest die Token-Datei mit Shared-Lock. Nur fuer Leser ausserhalb eines
+     * Schreibzyklus – innerhalb von mutate() ist readTokens() zu verwenden.
      */
     private function loadWithLock(): array
     {
@@ -132,6 +198,24 @@ class TokenStore
         flock($fh, LOCK_UN);
         fclose($fh);
 
+        return $this->decode($data);
+    }
+
+    /**
+     * Liest die Token-Datei ohne eigenen Lock. Setzt voraus, dass der Aufrufer
+     * die Sperre aus acquireLock() haelt.
+     */
+    private function readTokens(): array
+    {
+        if (!is_file($this->path)) {
+            return [];
+        }
+
+        return $this->decode(@file_get_contents($this->path));
+    }
+
+    private function decode($data): array
+    {
         if ($data === false || $data === '') {
             return [];
         }
@@ -226,7 +310,7 @@ class TokenStore
             return false;
         }
 
-        @chmod($this->path, 0600);
+        $this->hardenPermissions();
         return true;
     }
 
@@ -238,8 +322,8 @@ class TokenStore
      */
     private function saveInPlace(string $json): bool
     {
-        // 'cb+' legt die Datei bei Bedarf an, kuerzt sie aber nicht, bevor der
-        // exklusive Lock steht.
+        // Kein eigenes flock(): mutate() haelt die Sperre bereits, ein zweiter
+        // Lock auf dieselbe Datei wuerde sich im selben Prozess dagegen sperren.
         $fh = @fopen($this->path, 'cb+');
         if ($fh === false) {
             SecurityHelper::logError(
@@ -250,15 +334,7 @@ class TokenStore
             return false;
         }
 
-        if (!flock($fh, LOCK_EX)) {
-            fclose($fh);
-            SecurityHelper::logError('TokenStore', 'Kein exklusiver Lock auf ' . $this->path . ' erhaltbar.');
-            return false;
-        }
-
         $written = @ftruncate($fh, 0) && @rewind($fh) && $this->writeStream($fh, $json);
-
-        flock($fh, LOCK_UN);
         fclose($fh);
 
         if (!$written) {
@@ -272,8 +348,34 @@ class TokenStore
             return false;
         }
 
-        @chmod($this->path, 0600);
+        $this->hardenPermissions();
         return true;
+    }
+
+    /**
+     * Beschraenkt die Token-Datei auf den Eigentuemer.
+     *
+     * Der Schreibvorgang gilt auch dann als erfolgreich, wenn das misslingt –
+     * die Tokens stehen in der Datei, und sie deswegen zu verwerfen wuerde die
+     * Verbindung unnoetig zerstoeren. Bleibt die Datei aber fuer andere Konten
+     * les- oder schreibbar, muss das im Log stehen: ueber eine ACL kann sie
+     * beschreibbar sein und trotzdem offen liegen.
+     */
+    private function hardenPermissions(): void
+    {
+        @chmod($this->path, 0600);
+
+        $perms = @fileperms($this->path);
+        if ($perms === false || ($perms & 0077) === 0) {
+            return;
+        }
+
+        SecurityHelper::logError('TokenStore', sprintf(
+            'Rechte auf %s liessen sich nicht auf 0600 setzen (aktuell %04o) – die Tokens sind fuer '
+            . 'andere Konten zugaenglich. Eigentuemer und Rechte der Datei pruefen.',
+            $this->path,
+            $perms & 0777
+        ));
     }
 
     /**

@@ -1,5 +1,6 @@
 # Laufzeitdaten (Credentials, OAuth-Tokens, Konfiguration)
 data/tokens.json
+data/tokens.json.lock
 data/config.json
 
 # Uploads (Bilder werden zur Laufzeit hochgeladen)
