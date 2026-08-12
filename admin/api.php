@@ -253,14 +253,22 @@ try {
             requirePost($method);
             $input = getJsonInput();
             $deleteId = $input['id'] ?? '';
+
+            // Tokens zuerst entfernen: schlaegt das fehl, bleibt die Quelle in
+            // der Konfiguration stehen, statt verwaiste Zugangsdaten ohne
+            // zugehoerige Quelle in der Token-Datei zu hinterlassen.
+            $config = $cm->getAppConfig();
+            $tokenStore = new TokenStore($config['token_store']['path']);
+            if (!$tokenStore->remove($deleteId)) {
+                jsonResponse([
+                    'success' => false,
+                    'error' => 'Zugangsdaten konnten nicht geloescht werden – Quelle wurde nicht entfernt. Schreibrechte auf die Token-Datei pruefen.',
+                ], 500);
+            }
+
             $sources = $cm->getSection('calendar_sources') ?: [];
             $sources = array_values(array_filter($sources, fn($s) => $s['id'] !== $deleteId));
             $cm->saveSection('calendar_sources', $sources);
-
-            // Token auch entfernen
-            $config = $cm->getAppConfig();
-            $tokenStore = new TokenStore($config['token_store']['path']);
-            $tokenStore->remove($deleteId);
 
             jsonResponse(['success' => true]);
             break;
@@ -271,7 +279,12 @@ try {
             $disconnectId = $input['id'] ?? '';
             $config = $cm->getAppConfig();
             $tokenStore = new TokenStore($config['token_store']['path']);
-            $tokenStore->remove($disconnectId);
+            if (!$tokenStore->remove($disconnectId)) {
+                jsonResponse([
+                    'success' => false,
+                    'error' => 'Verbindung konnte nicht getrennt werden – die Zugangsdaten liegen weiterhin auf dem Server. Schreibrechte auf die Token-Datei pruefen.',
+                ], 500);
+            }
             jsonResponse(['success' => true]);
             break;
 

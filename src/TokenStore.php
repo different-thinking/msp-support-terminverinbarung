@@ -1,8 +1,15 @@
 <?php
 
+require_once __DIR__ . '/SecurityHelper.php';
+
 /**
  * Speichert und laedt OAuth-Tokens aus einer JSON-Datei.
  * Thread-safe durch File-Locking bei Lese- und Schreiboperationen.
+ *
+ * Alle schreibenden Methoden geben zurueck, ob die Aenderung tatsaechlich auf
+ * der Platte gelandet ist. Aufrufer muessen das auswerten: ein verlorenes
+ * (rotiertes) Refresh-Token laesst sich nicht wiederherstellen, die Verbindung
+ * muss dann neu aufgebaut werden.
  */
 class TokenStore
 {
@@ -27,19 +34,27 @@ class TokenStore
         return $this->tokens[$sourceId] ?? null;
     }
 
-    public function set(string $sourceId, array $tokenData): void
+    /**
+     * @return bool true, wenn der Eintrag persistiert wurde. Bei false bleibt
+     *              das Token nur im Speicher dieses Requests gueltig.
+     */
+    public function set(string $sourceId, array $tokenData): bool
     {
         // Vor dem Schreiben neu laden um Race-Conditions zu minimieren
         $this->tokens = $this->loadWithLock();
         $this->tokens[$sourceId] = $tokenData;
-        $this->save();
+        return $this->save();
     }
 
-    public function remove(string $sourceId): void
+    /**
+     * @return bool true, wenn die Quelle auch auf der Platte entfernt wurde.
+     *              Bei false liegen die Tokens weiterhin in der Datei.
+     */
+    public function remove(string $sourceId): bool
     {
         $this->tokens = $this->loadWithLock();
         unset($this->tokens[$sourceId]);
-        $this->save();
+        return $this->save();
     }
 
     /**
@@ -51,15 +66,15 @@ class TokenStore
      * verursachen). Ein erfolgreicher Refresh setzt den Eintrag per set()
      * komplett neu und loescht das Flag damit automatisch.
      */
-    public function markRefreshFailed(string $sourceId, string $reason): void
+    public function markRefreshFailed(string $sourceId, string $reason): bool
     {
         $this->tokens = $this->loadWithLock();
         if (!isset($this->tokens[$sourceId])) {
-            return; // Quelle wurde zwischenzeitlich getrennt
+            return false; // Quelle wurde zwischenzeitlich getrennt
         }
         $this->tokens[$sourceId]['refresh_failed_at'] = time();
         $this->tokens[$sourceId]['refresh_failed_reason'] = $reason;
-        $this->save();
+        return $this->save();
     }
 
     /**
@@ -92,11 +107,14 @@ class TokenStore
     }
 
     /**
-     * Liest Token-Datei mit Shared-Lock (verhindert korrupte Reads waehrend eines Writes).
+     * Liest die Token-Datei mit Shared-Lock. Gegen halbe Schreibvorgaenge
+     * schuetzt inzwischen save() selbst; der Lock haelt zusaetzlich Leser und
+     * Schreiber auseinander, solange nach einem Deploy noch alte Prozesse
+     * ohne atomares Schreiben laufen.
      */
     private function loadWithLock(): array
     {
-        if (!file_exists($this->path)) {
+        if (!is_file($this->path)) {
             return [];
         }
 
@@ -119,15 +137,96 @@ class TokenStore
     }
 
     /**
-     * Speichert Tokens atomar mit exklusivem Lock.
+     * Schreibt die Tokens atomar: erst vollstaendig in eine temporaere Datei,
+     * dann per rename() an ihren Platz. Ein abgebrochener Schreibvorgang kann
+     * die bestehende Datei damit nicht mehr beschaedigen – Leser sehen immer
+     * entweder den alten oder den neuen Stand, nie einen halben.
+     *
+     * Jeder Schritt wird geprueft. Schlaegt einer fehl (fehlende Schreibrechte,
+     * volle Platte), wird das protokolliert und false zurueckgegeben, statt den
+     * Verlust still hinzunehmen.
      */
-    private function save(): void
+    private function save(): bool
     {
-        file_put_contents(
-            $this->path,
-            json_encode($this->tokens, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-            LOCK_EX
-        );
-        chmod($this->path, 0600);
+        $json = json_encode($this->tokens, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            SecurityHelper::logError('TokenStore', 'Tokens nicht serialisierbar: ' . json_last_error_msg());
+            return false;
+        }
+
+        // Die temporaere Datei muss im Zielverzeichnis liegen: rename() ist nur
+        // innerhalb desselben Dateisystems atomar.
+        $dir = dirname($this->path);
+        $tmp = @tempnam($dir, '.tokens');
+        if ($tmp === false) {
+            SecurityHelper::logError(
+                'TokenStore',
+                'Keine temporaere Datei in ' . $dir . ' anlegbar – Schreibrechte des Verzeichnisses pruefen.'
+            );
+            return false;
+        }
+
+        // tempnam() weicht auf das System-Temp-Verzeichnis aus, wenn $dir nicht
+        // beschreibbar ist. Dort haetten die Tokens nichts zu suchen, und
+        // rename() waere ueber Dateisystemgrenzen hinweg nicht mehr atomar.
+        $tmpDir = realpath(dirname($tmp));
+        $targetDir = realpath($dir);
+        if ($tmpDir === false || $targetDir === false || $tmpDir !== $targetDir) {
+            @unlink($tmp);
+            SecurityHelper::logError(
+                'TokenStore',
+                'Verzeichnis ' . $dir . ' ist nicht beschreibbar – Rechte pruefen.'
+            );
+            return false;
+        }
+
+        // Rechte setzen, bevor Tokens in der Datei stehen.
+        @chmod($tmp, 0600);
+
+        if (!$this->writeFileDurably($tmp, $json)) {
+            @unlink($tmp);
+            SecurityHelper::logError(
+                'TokenStore',
+                'Tokens konnten nicht nach ' . $tmp . ' geschrieben werden – Plattenplatz pruefen.'
+            );
+            return false;
+        }
+
+        if (!@rename($tmp, $this->path)) {
+            @unlink($tmp);
+            SecurityHelper::logError(
+                'TokenStore',
+                'Tokens konnten nicht nach ' . $this->path . ' verschoben werden – Schreibrechte pruefen.'
+            );
+            return false;
+        }
+
+        @chmod($this->path, 0600);
+        return true;
+    }
+
+    /**
+     * Schreibt den Inhalt vollstaendig und gibt ihn an die Platte weiter.
+     * Ohne das Durchreichen haette rename() zwar Erfolg, der Inhalt koennte bei
+     * einem Absturz aber noch im Cache stehen – und ein rotiertes Refresh-Token
+     * ist nicht wiederherstellbar.
+     */
+    private function writeFileDurably(string $path, string $content): bool
+    {
+        $fh = @fopen($path, 'wb');
+        if ($fh === false) {
+            return false;
+        }
+
+        $written = @fwrite($fh, $content);
+        $complete = ($written === strlen($content)) && @fflush($fh);
+
+        // fsync() gibt es erst ab PHP 8.1.
+        if ($complete && function_exists('fsync')) {
+            $complete = @fsync($fh);
+        }
+
+        fclose($fh);
+        return $complete;
     }
 }
