@@ -63,12 +63,23 @@ class GoogleCalendarService implements CalendarServiceInterface
         ]);
 
         if (isset($response['access_token'])) {
-            $this->tokenStore->set($this->sourceId, [
+            $persisted = $this->tokenStore->set($this->sourceId, [
                 'access_token' => $response['access_token'],
                 'refresh_token' => $response['refresh_token'] ?? '',
                 'expires_at' => time() + ($response['expires_in'] ?? 3600),
                 'token_type' => $response['token_type'] ?? 'Bearer',
             ]);
+
+            // Ohne gespeicherte Tokens gibt es keine Verbindung – sonst meldet
+            // das Admin-Panel "Verbunden", obwohl nichts abgelegt wurde.
+            if (!$persisted) {
+                SecurityHelper::logError(
+                    'Google Token',
+                    'Verbindung fuer ' . $this->sourceId . ' nicht speicherbar – siehe TokenStore-Fehler.'
+                );
+                return false;
+            }
+
             return true;
         }
 
@@ -223,12 +234,25 @@ class GoogleCalendarService implements CalendarServiceInterface
         if (isset($response['access_token'])) {
             // set() ersetzt den Eintrag komplett und loescht damit auch ein
             // evtl. gesetztes refresh_failed_at-Flag.
-            $this->tokenStore->set($this->sourceId, [
+            $persisted = $this->tokenStore->set($this->sourceId, [
                 'access_token' => $response['access_token'],
                 'refresh_token' => $response['refresh_token'] ?? $refreshToken,
                 'expires_at' => time() + ($response['expires_in'] ?? 3600),
                 'token_type' => $response['token_type'] ?? 'Bearer',
             ]);
+
+            // Der laufende Request kann das Token weiterverwenden. Hat Google
+            // aber das Refresh-Token rotiert, ist das alte ab jetzt wertlos und
+            // die Verbindung stirbt beim naechsten Refresh – deshalb laut loggen.
+            if (!$persisted) {
+                SecurityHelper::logError(
+                    'Google Token',
+                    'Erneuertes Token fuer ' . $this->sourceId . ' nicht speicherbar. Die Verbindung '
+                    . 'geht beim naechsten Refresh verloren, falls Google rotiert hat. '
+                    . 'Schreibrechte auf die Token-Datei pruefen.'
+                );
+            }
+
             return $response['access_token'];
         }
 

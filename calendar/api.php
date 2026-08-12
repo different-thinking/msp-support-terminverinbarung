@@ -369,12 +369,25 @@ function refreshAccessToken(array $source, TokenStore $tokenStore, string $refre
     $data = json_decode($response, true) ?: [];
 
     if (isset($data['access_token'])) {
-        $tokenStore->set($source['id'], [
+        $persisted = $tokenStore->set($source['id'], [
             'access_token' => $data['access_token'],
             'refresh_token' => $data['refresh_token'] ?? $refreshToken,
             'expires_at' => time() + ($data['expires_in'] ?? 3600),
             'token_type' => $data['token_type'] ?? 'Bearer',
         ]);
+
+        // Der laufende Request kann das Token weiterverwenden. Hat der Provider
+        // aber das Refresh-Token rotiert, ist das alte ab jetzt wertlos und die
+        // Verbindung stirbt beim naechsten Refresh – deshalb laut loggen.
+        if (!$persisted) {
+            SecurityHelper::logError(
+                'Kalender-Token',
+                'Erneuertes Token fuer ' . $source['id'] . ' nicht speicherbar. Die Verbindung geht '
+                . 'beim naechsten Refresh verloren, falls der Provider rotiert hat. '
+                . 'Schreibrechte auf die Token-Datei pruefen.'
+            );
+        }
+
         return $data['access_token'];
     }
 

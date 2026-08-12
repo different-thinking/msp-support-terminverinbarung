@@ -253,16 +253,26 @@ try {
             requirePost($method);
             $input = getJsonInput();
             $deleteId = $input['id'] ?? '';
+
+            $config = $cm->getAppConfig();
+            $tokenStore = new TokenStore($config['token_store']['path']);
+            $tokensRemoved = $tokenStore->remove($deleteId);
+
             $sources = $cm->getSection('calendar_sources') ?: [];
             $sources = array_values(array_filter($sources, fn($s) => $s['id'] !== $deleteId));
             $cm->saveSection('calendar_sources', $sources);
 
-            // Token auch entfernen
-            $config = $cm->getAppConfig();
-            $tokenStore = new TokenStore($config['token_store']['path']);
-            $tokenStore->remove($deleteId);
-
-            jsonResponse(['success' => true]);
+            // Die Quelle verschwindet auch dann, wenn ihre Zugangsdaten liegen
+            // bleiben – sonst waere sie bei nicht beschreibbarer Token-Datei
+            // ueberhaupt nicht mehr loeschbar. Der Admin muss aber erfahren,
+            // dass er beim Anbieter selbst aufraeumen muss.
+            $result = ['success' => true];
+            if (!$tokensRemoved) {
+                $result['warning'] = 'Quelle entfernt, aber die gespeicherten Zugangsdaten konnten nicht '
+                    . 'geloescht werden. Zugriff beim Anbieter widerrufen und Schreibrechte auf die '
+                    . 'Token-Datei pruefen.';
+            }
+            jsonResponse($result);
             break;
 
         case 'disconnect-calendar':
@@ -271,7 +281,12 @@ try {
             $disconnectId = $input['id'] ?? '';
             $config = $cm->getAppConfig();
             $tokenStore = new TokenStore($config['token_store']['path']);
-            $tokenStore->remove($disconnectId);
+            if (!$tokenStore->remove($disconnectId)) {
+                jsonResponse([
+                    'success' => false,
+                    'error' => 'Verbindung konnte nicht getrennt werden – die Zugangsdaten liegen weiterhin auf dem Server. Schreibrechte auf die Token-Datei pruefen.',
+                ], 500);
+            }
             jsonResponse(['success' => true]);
             break;
 
