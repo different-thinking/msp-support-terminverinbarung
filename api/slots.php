@@ -63,7 +63,8 @@ try {
     // Kalender nicht abrufbar: KEINE Verfuegbarkeit ausliefern und nichts cachen.
     // Ein leeres/optimistisches Ergebnis wuerde in Outlook belegte Zeiten
     // als frei anzeigen.
-    error_log('Slots API – Kalender nicht erreichbar: ' . $e->getMessage());
+    // Ueber SecurityHelper, damit die Provider-Fehlermeldung redigiert wird
+    SecurityHelper::logError('Slots API', 'Kalender nicht erreichbar: ' . $e->getMessage());
     header('Cache-Control: no-store');
     jsonResponse([
         'error' => 'calendar_unavailable',

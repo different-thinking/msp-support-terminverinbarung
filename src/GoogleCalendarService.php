@@ -171,12 +171,20 @@ class GoogleCalendarService implements CalendarServiceInterface
                 );
             }
             foreach ($calData['busy'] ?? [] as $busy) {
+                // Fehlende Werte nicht an DateTime durchreichen: new DateTime(null)
+                // wirft nicht, sondern liefert die aktuelle Zeit – daraus wuerde
+                // ein falscher Busy-Slot statt eines Fehlers.
+                $startRaw = $busy['start'] ?? null;
+                $endRaw = $busy['end'] ?? null;
+                if (!is_string($startRaw) || $startRaw === '' || !is_string($endRaw) || $endRaw === '') {
+                    throw new CalendarUnavailableException($this->sourceId, 'Busy-Zeit ohne Start/Ende');
+                }
                 try {
                     $busySlots[] = [
-                        'start' => new \DateTime($busy['start']),
-                        'end' => new \DateTime($busy['end']),
+                        'start' => new \DateTime($startRaw),
+                        'end' => new \DateTime($endRaw),
                     ];
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Busy-Zeit');
                 }
             }
@@ -213,6 +221,8 @@ class GoogleCalendarService implements CalendarServiceInterface
         ]);
 
         if (isset($response['access_token'])) {
+            // set() ersetzt den Eintrag komplett und loescht damit auch ein
+            // evtl. gesetztes refresh_failed_at-Flag.
             $this->tokenStore->set($this->sourceId, [
                 'access_token' => $response['access_token'],
                 'refresh_token' => $response['refresh_token'] ?? $refreshToken,
@@ -220,6 +230,14 @@ class GoogleCalendarService implements CalendarServiceInterface
                 'token_type' => $response['token_type'] ?? 'Bearer',
             ]);
             return $response['access_token'];
+        }
+
+        // Nur eine echte Ablehnung durch Google macht die Verbindung tot –
+        // ein Netzwerkfehler ist voruebergehend.
+        if (!isset($response['_network_error'])) {
+            $reason = (string)($response['error_description'] ?? $response['error'] ?? 'unbekannt');
+            SecurityHelper::logError('Google Token', 'Refresh abgelehnt: ' . $reason);
+            $this->tokenStore->markRefreshFailed($this->sourceId, $reason);
         }
 
         return null;
@@ -281,7 +299,9 @@ class GoogleCalendarService implements CalendarServiceInterface
         if ($response === false) {
             SecurityHelper::logError('Google Token', 'Token endpoint error: ' . curl_error($ch));
             curl_close($ch);
-            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+            // Eigener Schluessel: ein Netzwerkfehler ist KEINE Ablehnung durch
+            // den Provider und darf die Verbindung nicht als tot markieren.
+            return ['_network_error' => 'Netzwerkfehler bei Token-Anfrage'];
         }
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

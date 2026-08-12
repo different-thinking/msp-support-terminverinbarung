@@ -113,11 +113,14 @@ function calApiRefreshAccessToken(array $source, TokenStore $tokenStore, string 
     ]);
 
     $response = curl_exec($ch);
+    $networkError = ($response === false);
     curl_close($ch);
 
-    $data = json_decode($response, true) ?: [];
+    $data = json_decode((string)$response, true) ?: [];
 
     if (isset($data['access_token'])) {
+        // set() ersetzt den Eintrag komplett und loescht damit auch ein
+        // evtl. gesetztes refresh_failed_at-Flag.
         $tokenStore->set($source['id'], [
             'access_token' => $data['access_token'],
             'refresh_token' => $data['refresh_token'] ?? $refreshToken,
@@ -127,7 +130,32 @@ function calApiRefreshAccessToken(array $source, TokenStore $tokenStore, string 
         return $data['access_token'];
     }
 
+    // Nur eine echte Ablehnung durch den Provider macht die Verbindung tot –
+    // ein Netzwerkfehler ist voruebergehend.
+    if (!$networkError) {
+        $reason = (string)($data['error_description'] ?? $data['error'] ?? 'unbekannt');
+        $tokenStore->markRefreshFailed($source['id'], $reason);
+    }
+
     return null;
+}
+
+/**
+ * Prueft rein lesend, ob eine Kalender-Verbindung als tot gilt.
+ *
+ * Bewusst OHNE Token-Refresh: Ein Refresh waere ein Provider-Request mit
+ * Schreib-Nebenwirkung (Microsoft rotiert Refresh-Tokens). In einer reinen
+ * Statusanzeige wuerde das bei jedem Seitenaufruf ausgeloest und koennte bei
+ * parallelen Aufrufen eine funktionierende Verbindung zerstoeren. Das Flag
+ * setzt stattdessen der Pfad, der ohnehin echte Abfragen macht.
+ */
+function calApiIsConnectionStale(array $source, TokenStore $tokenStore): bool
+{
+    if (!$tokenStore->has($source['id'])) {
+        return false; // gar nicht verbunden – das ist ein eigener Zustand
+    }
+
+    return $tokenStore->getRefreshFailure($source['id']) !== null;
 }
 
 function calApiGraphGet(string $url, string $accessToken, string $timezone): array

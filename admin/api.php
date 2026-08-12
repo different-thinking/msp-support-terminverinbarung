@@ -312,11 +312,9 @@ try {
             $status = [];
             $stale = [];
             foreach ($config['calendar_sources'] as $src) {
-                $hasToken = $tokenStore->has($src['id']);
-                $status[$src['id']] = $hasToken;
-                // Token vorhanden, aber nicht mehr erneuerbar = tote Verbindung
-                $stale[$src['id']] = $hasToken
-                    && calApiGetValidAccessToken($src, $tokenStore) === null;
+                $status[$src['id']] = $tokenStore->has($src['id']);
+                // Rein lesend: kein Token-Refresh beim Pollen des Status
+                $stale[$src['id']] = calApiIsConnectionStale($src, $tokenStore);
             }
             jsonResponse(['status' => $status, 'stale' => $stale]);
             break;

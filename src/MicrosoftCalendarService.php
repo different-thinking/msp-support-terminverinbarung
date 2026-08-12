@@ -180,59 +180,67 @@ class MicrosoftCalendarService implements CalendarServiceInterface
      */
     public function parseFreeBusyResponse(string $response): array
     {
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Graph-Antwort');
+        }
+
         $busySlots = [];
         $page = 0;
 
         while (true) {
-            $data = json_decode($response, true);
-            if (!is_array($data)) {
-                throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Graph-Antwort');
-            }
-            if (isset($data['error'])) {
-                throw new CalendarUnavailableException(
-                    $this->sourceId,
-                    'Graph-Fehler: ' . ($data['error']['message'] ?? 'unbekannt')
-                );
-            }
-            if (!isset($data['value']) || !is_array($data['value'])) {
-                throw new CalendarUnavailableException($this->sourceId, 'Graph-Antwort ohne Event-Liste');
-            }
-
-            foreach ($data['value'] as $event) {
-                if (!empty($event['isCancelled'])) {
-                    continue;
-                }
-                if (!in_array($event['showAs'] ?? 'busy', self::BUSY_SHOW_AS, true)) {
-                    continue;
-                }
-                $busySlots[] = $this->toBusySlot($event);
-            }
+            $busySlots = array_merge($busySlots, $this->mapBusyEvents($data));
 
             $nextLink = $data['@odata.nextLink'] ?? '';
-            if ($nextLink === '' || ++$page >= self::MAX_FREEBUSY_PAGES) {
-                if ($nextLink !== '') {
-                    // Nicht alle Belegungen gelesen – lieber abbrechen als
-                    // eine lueckenhafte Verfuegbarkeit anzeigen.
-                    throw new CalendarUnavailableException(
-                        $this->sourceId,
-                        'Zu viele Kalendereintraege im Zeitraum (Seitenlimit erreicht)'
-                    );
-                }
+            if ($nextLink === '') {
                 break;
+            }
+            if (++$page >= self::MAX_FREEBUSY_PAGES) {
+                // Nicht alle Belegungen gelesen – lieber abbrechen als
+                // eine lueckenhafte Verfuegbarkeit anzeigen.
+                throw new CalendarUnavailableException(
+                    $this->sourceId,
+                    'Zu viele Kalendereintraege im Zeitraum (Seitenlimit erreicht)'
+                );
             }
 
             $accessToken = $this->getValidAccessToken();
             if (!$accessToken) {
                 throw new CalendarUnavailableException($this->sourceId, 'Token beim Nachladen ungueltig');
             }
-            $next = $this->graphGet($nextLink, $accessToken);
-            if (isset($next['error'])) {
-                throw new CalendarUnavailableException(
-                    $this->sourceId,
-                    'Graph-Fehler beim Nachladen: ' . ($next['error']['message'] ?? 'unbekannt')
-                );
+            // graphGet liefert bereits ein dekodiertes Array – ohne JSON-Umweg weiter
+            $data = $this->graphGet($nextLink, $accessToken);
+        }
+
+        return $busySlots;
+    }
+
+    /**
+     * Prueft eine dekodierte Graph-Seite und wandelt ihre Events in Busy-Slots.
+     *
+     * @throws CalendarUnavailableException bei Fehler-Payload oder fehlender Event-Liste
+     */
+    private function mapBusyEvents(array $data): array
+    {
+        if (isset($data['error'])) {
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Graph-Fehler: ' . ($data['error']['message'] ?? 'unbekannt')
+            );
+        }
+        if (!isset($data['value']) || !is_array($data['value'])) {
+            throw new CalendarUnavailableException($this->sourceId, 'Graph-Antwort ohne Event-Liste');
+        }
+
+        $busySlots = [];
+        foreach ($data['value'] as $event) {
+            if (!empty($event['isCancelled'])) {
+                continue;
             }
-            $response = json_encode($next);
+            if (!in_array($event['showAs'] ?? 'busy', self::BUSY_SHOW_AS, true)) {
+                continue;
+            }
+            $busySlots[] = $this->toBusySlot($event);
         }
 
         return $busySlots;
@@ -426,6 +434,8 @@ class MicrosoftCalendarService implements CalendarServiceInterface
         ]);
 
         if (isset($response['access_token'])) {
+            // set() ersetzt den Eintrag komplett und loescht damit auch ein
+            // evtl. gesetztes refresh_failed_at-Flag.
             $this->tokenStore->set($this->sourceId, [
                 'access_token' => $response['access_token'],
                 'refresh_token' => $response['refresh_token'] ?? $refreshToken,
@@ -433,6 +443,14 @@ class MicrosoftCalendarService implements CalendarServiceInterface
                 'token_type' => $response['token_type'] ?? 'Bearer',
             ]);
             return $response['access_token'];
+        }
+
+        // Nur eine echte Ablehnung durch Microsoft (z.B. invalid_grant) macht
+        // die Verbindung tot – ein Netzwerkfehler ist voruebergehend.
+        if (!isset($response['_network_error'])) {
+            $reason = (string)($response['error_description'] ?? $response['error'] ?? 'unbekannt');
+            SecurityHelper::logError('MS Token', 'Refresh abgelehnt: ' . $reason);
+            $this->tokenStore->markRefreshFailed($this->sourceId, $reason);
         }
 
         return null;
@@ -528,7 +546,9 @@ class MicrosoftCalendarService implements CalendarServiceInterface
         if ($response === false) {
             SecurityHelper::logError('MS Token', 'Token endpoint error: ' . curl_error($ch));
             curl_close($ch);
-            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+            // Eigener Schluessel: ein Netzwerkfehler ist KEINE Ablehnung durch
+            // den Provider und darf die Verbindung nicht als tot markieren.
+            return ['_network_error' => 'Netzwerkfehler bei Token-Anfrage'];
         }
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

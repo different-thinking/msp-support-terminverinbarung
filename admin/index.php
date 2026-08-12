@@ -79,19 +79,20 @@ if (isset($_GET['msg'])) {
 
 // Kalender-Verbindungsstatus.
 // Ein vorhandenes Token heisst noch nicht, dass die Verbindung lebt: Nach
-// Passwortwechsel, Entzug der Zustimmung oder langer Inaktivitaet ist der
-// Refresh-Token tot. Deshalb wird hier zusaetzlich ein echter Token-Refresh
-// versucht – sonst zeigt das Admin "Verbunden", waehrend die Verfuegbarkeit
-// nicht mehr abgerufen werden kann.
-require_once __DIR__ . '/../calendar/api-functions.php';
-
+// Passwortwechsel, Entzug der Zustimmung oder langer Inaktivitaet lehnt der
+// Provider die Erneuerung ab. Dieser Fall wird dort vermerkt, wo er auftritt
+// (Verfuegbarkeits- und Kalenderabfragen), und hier nur noch ausgelesen –
+// die Statusanzeige selbst macht keinen Provider-Request und schreibt keine
+// Tokens. Nur fuer angemeldete Admins, damit anonyme Aufrufe die Token-Datei
+// nicht einmal lesen.
 $calendarStatus = [];
 $calendarStale = [];
-foreach ($config['calendar_sources'] as $src) {
-    $hasToken = $tokenStore->has($src['id']);
-    $calendarStatus[$src['id']] = $hasToken;
-    $calendarStale[$src['id']] = $hasToken
-        && calApiGetValidAccessToken($src, $tokenStore) === null;
+if ($authenticated) {
+    require_once __DIR__ . '/../calendar/api-functions.php';
+    foreach ($config['calendar_sources'] as $src) {
+        $calendarStatus[$src['id']] = $tokenStore->has($src['id']);
+        $calendarStale[$src['id']] = calApiIsConnectionStale($src, $tokenStore);
+    }
 }
 ?>
 <!DOCTYPE html>
