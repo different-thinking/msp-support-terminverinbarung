@@ -53,6 +53,12 @@ class TokenStore
     public function remove(string $sourceId): bool
     {
         return $this->mutate(function (array &$tokens) use ($sourceId): bool {
+            if (!array_key_exists($sourceId, $tokens)) {
+                // Nichts zu loeschen – ohne diesen Kurzschluss wuerde ein
+                // fehlgeschlagener Schreibvorgang eine Warnung ausloesen,
+                // obwohl gar keine Zugangsdaten mehr gespeichert sind.
+                return false;
+            }
             unset($tokens[$sourceId]);
             return true;
         });
@@ -136,7 +142,21 @@ class TokenStore
             // Innerhalb der Sperre ohne weiteres flock() lesen und schreiben:
             // ein zweiter Lock auf dieselbe Datei im selben Prozess wuerde sich
             // gegen den bereits gehaltenen sperren.
-            $this->tokens = $this->readTokens();
+            $tokens = $this->readTokens();
+
+            // Ein fehlgeschlagener Lesevorgang darf nicht als "keine Tokens"
+            // durchgehen: gespeichert wuerde sonst nur die aktuelle Quelle und
+            // alle uebrigen Verbindungen waeren geloescht.
+            if ($tokens === null) {
+                SecurityHelper::logError(
+                    'TokenStore',
+                    'Token-Datei ' . $this->path . ' ist nicht lesbar – Aenderung verworfen, damit die '
+                    . 'uebrigen Verbindungen nicht ueberschrieben werden. Rechte der Datei pruefen.'
+                );
+                return false;
+            }
+
+            $this->tokens = $tokens;
 
             if (!$mutator($this->tokens)) {
                 return true; // nichts zu tun ist kein Fehlschlag
@@ -188,8 +208,11 @@ class TokenStore
             return [];
         }
 
-        $fh = fopen($this->path, 'r');
+        $fh = @fopen($this->path, 'r');
         if ($fh === false) {
+            // Reiner Lesepfad: die Quellen erscheinen als nicht verbunden.
+            // Schreibvorgaenge brechen in mutate() sauber ab, statt den
+            // leeren Stand zu speichern.
             return [];
         }
 
@@ -204,14 +227,23 @@ class TokenStore
     /**
      * Liest die Token-Datei ohne eigenen Lock. Setzt voraus, dass der Aufrufer
      * die Sperre aus acquireLock() haelt.
+     *
+     * @return array|null null, wenn die vorhandene Datei nicht gelesen werden
+     *                    konnte. Das ist etwas anderes als "keine Tokens" und
+     *                    darf nicht zu einem Schreibvorgang fuehren.
      */
-    private function readTokens(): array
+    private function readTokens(): ?array
     {
         if (!is_file($this->path)) {
             return [];
         }
 
-        return $this->decode(@file_get_contents($this->path));
+        $data = @file_get_contents($this->path);
+        if ($data === false) {
+            return null;
+        }
+
+        return $this->decode($data);
     }
 
     private function decode($data): array
@@ -390,8 +422,20 @@ class TokenStore
      */
     private function writeStream($handle, string $content): bool
     {
-        $written = @fwrite($handle, $content);
-        if ($written !== strlen($content) || !@fflush($handle)) {
+        // fwrite() darf weniger schreiben als verlangt, ohne dass ein Fehler
+        // vorliegt. Ein solcher Teilerfolg wird fortgesetzt statt als Fehlschlag
+        // gewertet – saveInPlace() hat die Datei zu diesem Zeitpunkt bereits
+        // gekuerzt, ein Abbruch liesse unvollstaendiges JSON zurueck.
+        $length = strlen($content);
+        for ($written = 0; $written < $length;) {
+            $chunk = @fwrite($handle, substr($content, $written));
+            if ($chunk === false || $chunk === 0) {
+                return false; // echter Fehler, z.B. volle Platte
+            }
+            $written += $chunk;
+        }
+
+        if (!@fflush($handle)) {
             return false;
         }
 
