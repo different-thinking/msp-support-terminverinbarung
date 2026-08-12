@@ -407,7 +407,9 @@
 
             apiPost('delete-calendar-source', { id: id }).then(res => {
                 if (res.success) {
-                    showToast('Kalender-Quelle entfernt');
+                    // Die Quelle ist weg, ihre Zugangsdaten koennen aber liegen
+                    // geblieben sein – das muss sichtbar sein.
+                    showToast(res.warning || 'Kalender-Quelle entfernt', res.warning ? 'error' : 'success');
                     document.querySelector(`.calendar-source-card[data-id="${id}"]`).remove();
                 } else {
                     showToast(res.error || 'Fehler', 'error');

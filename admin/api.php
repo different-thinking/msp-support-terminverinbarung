@@ -254,23 +254,25 @@ try {
             $input = getJsonInput();
             $deleteId = $input['id'] ?? '';
 
-            // Tokens zuerst entfernen: schlaegt das fehl, bleibt die Quelle in
-            // der Konfiguration stehen, statt verwaiste Zugangsdaten ohne
-            // zugehoerige Quelle in der Token-Datei zu hinterlassen.
             $config = $cm->getAppConfig();
             $tokenStore = new TokenStore($config['token_store']['path']);
-            if (!$tokenStore->remove($deleteId)) {
-                jsonResponse([
-                    'success' => false,
-                    'error' => 'Zugangsdaten konnten nicht geloescht werden – Quelle wurde nicht entfernt. Schreibrechte auf die Token-Datei pruefen.',
-                ], 500);
-            }
+            $tokensRemoved = $tokenStore->remove($deleteId);
 
             $sources = $cm->getSection('calendar_sources') ?: [];
             $sources = array_values(array_filter($sources, fn($s) => $s['id'] !== $deleteId));
             $cm->saveSection('calendar_sources', $sources);
 
-            jsonResponse(['success' => true]);
+            // Die Quelle verschwindet auch dann, wenn ihre Zugangsdaten liegen
+            // bleiben – sonst waere sie bei nicht beschreibbarer Token-Datei
+            // ueberhaupt nicht mehr loeschbar. Der Admin muss aber erfahren,
+            // dass er beim Anbieter selbst aufraeumen muss.
+            $result = ['success' => true];
+            if (!$tokensRemoved) {
+                $result['warning'] = 'Quelle entfernt, aber die gespeicherten Zugangsdaten konnten nicht '
+                    . 'geloescht werden. Zugriff beim Anbieter widerrufen und Schreibrechte auf die '
+                    . 'Token-Datei pruefen.';
+            }
+            jsonResponse($result);
             break;
 
         case 'disconnect-calendar':
