@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/CalendarServiceInterface.php';
+require_once __DIR__ . '/CalendarUnavailableException.php';
+require_once __DIR__ . '/SecurityHelper.php';
 
 /**
  * Microsoft 365 Kalender-Service über Microsoft Graph API.
@@ -20,10 +22,14 @@ class MicrosoftCalendarService implements CalendarServiceInterface
 
     /** Token-Erneuerung N Sekunden vor Ablauf */
     private const TOKEN_REFRESH_BUFFER_SECONDS = 300;
-    /** Max. Kalender-Events pro Abfrage */
+    /** Max. Kalender-Events pro Abfrage-Seite */
     private const MAX_CALENDAR_EVENTS = 500;
+    /** Max. Folgeseiten (@odata.nextLink), die pro Abfrage nachgeladen werden */
+    private const MAX_FREEBUSY_PAGES = 20;
     /** HTTP-Timeout fuer API-Calls in Sekunden */
     private const HTTP_TIMEOUT_SECONDS = 30;
+    /** showAs-Werte, die einen Zeitraum als belegt markieren */
+    private const BUSY_SHOW_AS = ['busy', 'oof', 'tentative'];
 
     public function __construct(array $sourceConfig, TokenStore $tokenStore, string $timezone = 'Europe/Berlin')
     {
@@ -101,7 +107,12 @@ class MicrosoftCalendarService implements CalendarServiceInterface
         $busySlots = [];
         foreach ($handles as $entry) {
             $response = curl_exec($entry['handle']);
+            $error = curl_error($entry['handle']);
             curl_close($entry['handle']);
+
+            if ($response === false) {
+                throw new CalendarUnavailableException($this->sourceId, 'Netzwerkfehler: ' . $error);
+            }
             $busySlots = array_merge($busySlots, $this->parseFreeBusyResponse($response));
         }
 
@@ -110,23 +121,34 @@ class MicrosoftCalendarService implements CalendarServiceInterface
 
     /**
      * Bereitet curl-Handles für Free/Busy-Abfragen vor (für parallele Ausführung).
+     *
      * @return array [['handle' => resource], ...]
+     * @throws CalendarUnavailableException wenn kein gueltiges Access-Token
+     *         beschafft werden kann (Fail-Closed statt "alles frei")
      */
     public function prepareFreeBusyCurl(\DateTimeInterface $start, \DateTimeInterface $end): array
     {
         $accessToken = $this->getValidAccessToken();
         if (!$accessToken) {
-            return [];
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'M365-Verbindung abgelaufen oder ungueltig – Free/Busy nicht abrufbar'
+            );
         }
 
         $handles = [];
         foreach ($this->sourceConfig['calendars'] as $calendarId) {
-            $calPath = ($calendarId === 'primary') ? '' : "/calendars/{$calendarId}";
+            $calPath = ($calendarId === 'primary') ? '' : '/calendars/' . rawurlencode($calendarId);
             $url = self::GRAPH_URL . "/me{$calPath}/calendarView?"
                 . http_build_query([
-                    'startDateTime' => $start->format('Y-m-d\TH:i:s'),
-                    'endDateTime' => $end->format('Y-m-d\TH:i:s'),
-                    '$select' => 'start,end,showAs',
+                    // WICHTIG: mit Zeitzonen-Offset (ATOM). Graph interpretiert
+                    // Werte ohne Offset als UTC – ein naives "09:00" wuerde in
+                    // Europe/Berlin real 11:00 abfragen, wodurch alle Termine
+                    // der ersten Stunden des Tages unsichtbar bleiben und die
+                    // Webseite bereits vergebene Zeiten als frei anbietet.
+                    'startDateTime' => $start->format(\DateTimeInterface::ATOM),
+                    'endDateTime' => $end->format(\DateTimeInterface::ATOM),
+                    '$select' => 'start,end,showAs,isCancelled',
                     '$top' => self::MAX_CALENDAR_EVENTS,
                 ]);
 
@@ -149,25 +171,131 @@ class MicrosoftCalendarService implements CalendarServiceInterface
 
     /**
      * Parsed eine Free/Busy-Response zu Busy-Slots.
+     *
+     * Folgt @odata.nextLink, damit bei vielen Terminen keine Belegungen
+     * verloren gehen (eine unvollstaendige Seite wuerde belegte Zeiten
+     * faelschlich als frei erscheinen lassen).
+     *
+     * @throws CalendarUnavailableException bei unlesbarer oder fehlerhafter Response
      */
     public function parseFreeBusyResponse(string $response): array
     {
-        $data = json_decode($response, true) ?: [];
-        $busySlots = [];
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Graph-Antwort');
+        }
 
-        if (isset($data['value'])) {
-            foreach ($data['value'] as $event) {
-                $showAs = $event['showAs'] ?? 'busy';
-                if (in_array($showAs, ['busy', 'oof', 'tentative'])) {
-                    $busySlots[] = [
-                        'start' => new \DateTime($event['start']['dateTime'], new \DateTimeZone($event['start']['timeZone'] ?? 'UTC')),
-                        'end' => new \DateTime($event['end']['dateTime'], new \DateTimeZone($event['end']['timeZone'] ?? 'UTC')),
-                    ];
-                }
+        $busySlots = [];
+        $page = 0;
+
+        while (true) {
+            $busySlots = array_merge($busySlots, $this->mapBusyEvents($data));
+
+            $nextLink = $data['@odata.nextLink'] ?? '';
+            if ($nextLink === '') {
+                break;
             }
+            if (++$page >= self::MAX_FREEBUSY_PAGES) {
+                // Nicht alle Belegungen gelesen – lieber abbrechen als
+                // eine lueckenhafte Verfuegbarkeit anzeigen.
+                throw new CalendarUnavailableException(
+                    $this->sourceId,
+                    'Zu viele Kalendereintraege im Zeitraum (Seitenlimit erreicht)'
+                );
+            }
+
+            $accessToken = $this->getValidAccessToken();
+            if (!$accessToken) {
+                throw new CalendarUnavailableException($this->sourceId, 'Token beim Nachladen ungueltig');
+            }
+            // graphGet liefert bereits ein dekodiertes Array – ohne JSON-Umweg weiter
+            $data = $this->graphGet($nextLink, $accessToken);
         }
 
         return $busySlots;
+    }
+
+    /**
+     * Prueft eine dekodierte Graph-Seite und wandelt ihre Events in Busy-Slots.
+     *
+     * @throws CalendarUnavailableException bei Fehler-Payload oder fehlender Event-Liste
+     */
+    private function mapBusyEvents(array $data): array
+    {
+        if (isset($data['error'])) {
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Graph-Fehler: ' . ($data['error']['message'] ?? 'unbekannt')
+            );
+        }
+        if (!isset($data['value']) || !is_array($data['value'])) {
+            throw new CalendarUnavailableException($this->sourceId, 'Graph-Antwort ohne Event-Liste');
+        }
+
+        $busySlots = [];
+        foreach ($data['value'] as $event) {
+            if (!empty($event['isCancelled'])) {
+                continue;
+            }
+            if (!in_array($event['showAs'] ?? 'busy', self::BUSY_SHOW_AS, true)) {
+                continue;
+            }
+            $busySlots[] = $this->toBusySlot($event);
+        }
+
+        return $busySlots;
+    }
+
+    /**
+     * Wandelt ein Graph-Event in einen Busy-Slot um.
+     *
+     * Fail-Closed: Ist die Zeitangabe unbrauchbar, wird abgebrochen statt den
+     * Termin zu ueberspringen – ein uebersprungener Termin wuerde als freie
+     * Zeit auf der Webseite erscheinen.
+     *
+     * @throws CalendarUnavailableException
+     */
+    private function toBusySlot(array $event): array
+    {
+        $startRaw = $event['start']['dateTime'] ?? '';
+        $endRaw = $event['end']['dateTime'] ?? '';
+
+        if ($startRaw === '' || $endRaw === '') {
+            throw new CalendarUnavailableException($this->sourceId, 'Event ohne Start-/Endzeit');
+        }
+
+        try {
+            return [
+                'start' => new \DateTime($startRaw, $this->resolveTimeZone($event['start']['timeZone'] ?? null)),
+                'end' => new \DateTime($endRaw, $this->resolveTimeZone($event['end']['timeZone'] ?? null)),
+            ];
+        } catch (\Exception $e) {
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Unlesbare Event-Zeit: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * Loest den von Graph gelieferten Zeitzonen-Namen auf.
+     * Graph kann auch Windows-Namen ("W. Europe Standard Time") oder
+     * "tzone://..." liefern – dann greift die konfigurierte Zeitzone.
+     */
+    private function resolveTimeZone(?string $name): \DateTimeZone
+    {
+        foreach ([$name, $this->timezone] as $candidate) {
+            if (empty($candidate)) {
+                continue;
+            }
+            try {
+                return new \DateTimeZone($candidate);
+            } catch (\Exception $e) {
+                // naechsten Kandidaten probieren
+            }
+        }
+
+        return new \DateTimeZone('UTC');
     }
 
     /**
@@ -306,6 +434,8 @@ class MicrosoftCalendarService implements CalendarServiceInterface
         ]);
 
         if (isset($response['access_token'])) {
+            // set() ersetzt den Eintrag komplett und loescht damit auch ein
+            // evtl. gesetztes refresh_failed_at-Flag.
             $this->tokenStore->set($this->sourceId, [
                 'access_token' => $response['access_token'],
                 'refresh_token' => $response['refresh_token'] ?? $refreshToken,
@@ -313,6 +443,14 @@ class MicrosoftCalendarService implements CalendarServiceInterface
                 'token_type' => $response['token_type'] ?? 'Bearer',
             ]);
             return $response['access_token'];
+        }
+
+        // Nur eine echte Ablehnung durch Microsoft (z.B. invalid_grant) macht
+        // die Verbindung tot – ein Netzwerkfehler ist voruebergehend.
+        if (!isset($response['_network_error'])) {
+            $reason = (string)($response['error_description'] ?? $response['error'] ?? 'unbekannt');
+            SecurityHelper::logError('MS Token', 'Refresh abgelehnt: ' . $reason);
+            $this->tokenStore->markRefreshFailed($this->sourceId, $reason);
         }
 
         return null;
@@ -408,7 +546,9 @@ class MicrosoftCalendarService implements CalendarServiceInterface
         if ($response === false) {
             SecurityHelper::logError('MS Token', 'Token endpoint error: ' . curl_error($ch));
             curl_close($ch);
-            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+            // Eigener Schluessel: ein Netzwerkfehler ist KEINE Ablehnung durch
+            // den Provider und darf die Verbindung nicht als tot markieren.
+            return ['_network_error' => 'Netzwerkfehler bei Token-Anfrage'];
         }
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

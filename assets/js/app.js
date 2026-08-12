@@ -21,6 +21,7 @@
         attendees: [],
         loading: false,
         loadError: false,
+        slotsError: false,
         currentStep: 1,
     };
 
@@ -278,13 +279,20 @@
         container.innerHTML = '<div class="calendar-loading"><div class="spinner spinner-dark"></div></div>';
 
         fetch(`api/slots.php?action=slots&date=${date}`)
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 state.availableSlots = data.slots || [];
+                state.slotsError = false;
                 renderTimeSlots(date);
             })
             .catch(() => {
+                // Fehler nicht als "keine Termine" darstellen – sonst wirkt ein
+                // Kalender-Ausfall wie ein voller Tag (oder umgekehrt).
                 state.availableSlots = [];
+                state.slotsError = true;
                 renderTimeSlots(date);
             });
     }
@@ -298,9 +306,31 @@
 
         let html = `<div class="time-slots-date">${dateFormatted}</div>`;
 
+        // Eine frühere Auswahl verwerfen, wenn sie nicht mehr belegbar ist –
+        // sonst bleibt der Weiter-Button nach einem Ladefehler oder einem
+        // inzwischen vergebenen Slot aktiv und die Buchung scheitert erst spät.
+        if (state.selectedTime && !state.availableSlots.some(s => s.start === state.selectedTime)) {
+            state.selectedTime = null;
+        }
+
+        if (state.slotsError) {
+            html += '<div class="time-slots-empty">Die Verfügbarkeit konnte nicht geladen werden.</div>';
+            html += '<div style="text-align:center;margin-top:8px;">'
+                + '<button type="button" class="btn btn-secondary btn-sm" id="btn-retry-slots">Erneut versuchen</button>'
+                + '</div>';
+            container.innerHTML = html;
+            const retryBtn = container.querySelector('#btn-retry-slots');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', () => loadTimeSlots(date));
+            }
+            updateContinueButton();
+            return;
+        }
+
         if (state.availableSlots.length === 0) {
             html += '<div class="time-slots-empty">Keine verfügbaren Zeitslots an diesem Tag.</div>';
             container.innerHTML = html;
+            updateContinueButton();
             return;
         }
 

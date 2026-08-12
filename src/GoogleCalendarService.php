@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/CalendarServiceInterface.php';
+require_once __DIR__ . '/CalendarUnavailableException.php';
 
 /**
  * Google Calendar Service über Google Calendar API v3.
@@ -105,7 +106,10 @@ class GoogleCalendarService implements CalendarServiceInterface
     {
         $accessToken = $this->getValidAccessToken();
         if (!$accessToken) {
-            return [];
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Google-Verbindung abgelaufen oder ungueltig – Free/Busy nicht abrufbar'
+            );
         }
 
         $calendarIds = [];
@@ -137,21 +141,51 @@ class GoogleCalendarService implements CalendarServiceInterface
 
     /**
      * Parsed eine Free/Busy-Response zu Busy-Slots.
+     *
+     * @throws CalendarUnavailableException bei unlesbarer oder fehlerhafter Response
      */
     public function parseFreeBusyResponse(string $response): array
     {
-        $data = json_decode($response, true) ?: [];
-        $busySlots = [];
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Calendar-API-Antwort');
+        }
+        if (isset($data['error'])) {
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Calendar-API-Fehler: ' . ($data['error']['message'] ?? 'unbekannt')
+            );
+        }
+        if (!isset($data['calendars']) || !is_array($data['calendars'])) {
+            throw new CalendarUnavailableException($this->sourceId, 'Antwort ohne Free/Busy-Daten');
+        }
 
-        if (isset($data['calendars'])) {
-            foreach ($data['calendars'] as $calData) {
-                if (isset($calData['busy'])) {
-                    foreach ($calData['busy'] as $busy) {
-                        $busySlots[] = [
-                            'start' => new \DateTime($busy['start']),
-                            'end' => new \DateTime($busy['end']),
-                        ];
-                    }
+        $busySlots = [];
+        foreach ($data['calendars'] as $calId => $calData) {
+            // Pro-Kalender-Fehler (z.B. notFound) duerfen nicht als "frei" gelten
+            if (!empty($calData['errors'])) {
+                $reason = $calData['errors'][0]['reason'] ?? 'unbekannt';
+                throw new CalendarUnavailableException(
+                    $this->sourceId,
+                    "Kalender '{$calId}' nicht abrufbar: {$reason}"
+                );
+            }
+            foreach ($calData['busy'] ?? [] as $busy) {
+                // Fehlende Werte nicht an DateTime durchreichen: new DateTime(null)
+                // wirft nicht, sondern liefert die aktuelle Zeit – daraus wuerde
+                // ein falscher Busy-Slot statt eines Fehlers.
+                $startRaw = $busy['start'] ?? null;
+                $endRaw = $busy['end'] ?? null;
+                if (!is_string($startRaw) || $startRaw === '' || !is_string($endRaw) || $endRaw === '') {
+                    throw new CalendarUnavailableException($this->sourceId, 'Busy-Zeit ohne Start/Ende');
+                }
+                try {
+                    $busySlots[] = [
+                        'start' => new \DateTime($startRaw),
+                        'end' => new \DateTime($endRaw),
+                    ];
+                } catch (\Throwable $e) {
+                    throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Busy-Zeit');
                 }
             }
         }
@@ -187,6 +221,8 @@ class GoogleCalendarService implements CalendarServiceInterface
         ]);
 
         if (isset($response['access_token'])) {
+            // set() ersetzt den Eintrag komplett und loescht damit auch ein
+            // evtl. gesetztes refresh_failed_at-Flag.
             $this->tokenStore->set($this->sourceId, [
                 'access_token' => $response['access_token'],
                 'refresh_token' => $response['refresh_token'] ?? $refreshToken,
@@ -194,6 +230,14 @@ class GoogleCalendarService implements CalendarServiceInterface
                 'token_type' => $response['token_type'] ?? 'Bearer',
             ]);
             return $response['access_token'];
+        }
+
+        // Nur eine echte Ablehnung durch Google macht die Verbindung tot –
+        // ein Netzwerkfehler ist voruebergehend.
+        if (!isset($response['_network_error'])) {
+            $reason = (string)($response['error_description'] ?? $response['error'] ?? 'unbekannt');
+            SecurityHelper::logError('Google Token', 'Refresh abgelehnt: ' . $reason);
+            $this->tokenStore->markRefreshFailed($this->sourceId, $reason);
         }
 
         return null;
@@ -255,7 +299,9 @@ class GoogleCalendarService implements CalendarServiceInterface
         if ($response === false) {
             SecurityHelper::logError('Google Token', 'Token endpoint error: ' . curl_error($ch));
             curl_close($ch);
-            return ['error' => 'Netzwerkfehler bei Token-Anfrage'];
+            // Eigener Schluessel: ein Netzwerkfehler ist KEINE Ablehnung durch
+            // den Provider und darf die Verbindung nicht als tot markieren.
+            return ['_network_error' => 'Netzwerkfehler bei Token-Anfrage'];
         }
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);

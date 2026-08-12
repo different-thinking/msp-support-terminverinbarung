@@ -42,6 +42,45 @@ class TokenStore
         $this->save();
     }
 
+    /**
+     * Vermerkt, dass der Provider die Token-Erneuerung abgelehnt hat.
+     *
+     * Das Flag erlaubt es dem Admin, eine tote Verbindung anzuzeigen, ohne
+     * dafuer selbst einen Refresh auszuloesen (der wuerde bei jedem Seiten-
+     * aufruf einen Provider-Request und einen Token-Rotationsschreibvorgang
+     * verursachen). Ein erfolgreicher Refresh setzt den Eintrag per set()
+     * komplett neu und loescht das Flag damit automatisch.
+     */
+    public function markRefreshFailed(string $sourceId, string $reason): void
+    {
+        $this->tokens = $this->loadWithLock();
+        if (!isset($this->tokens[$sourceId])) {
+            return; // Quelle wurde zwischenzeitlich getrennt
+        }
+        $this->tokens[$sourceId]['refresh_failed_at'] = time();
+        $this->tokens[$sourceId]['refresh_failed_reason'] = $reason;
+        $this->save();
+    }
+
+    /**
+     * Gibt den letzten Refresh-Fehler zurueck oder null, wenn keiner vorliegt.
+     * Reine Leseoperation – kein Netzwerkzugriff.
+     *
+     * @return array{at: int, reason: string}|null
+     */
+    public function getRefreshFailure(string $sourceId): ?array
+    {
+        $entry = $this->tokens[$sourceId] ?? null;
+        if (!$entry || empty($entry['refresh_failed_at'])) {
+            return null;
+        }
+
+        return [
+            'at' => (int)$entry['refresh_failed_at'],
+            'reason' => (string)($entry['refresh_failed_reason'] ?? ''),
+        ];
+    }
+
     public function getAll(): array
     {
         return $this->tokens;

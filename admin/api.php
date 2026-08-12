@@ -308,11 +308,15 @@ try {
             if ($method !== 'GET') jsonResponse(['error' => 'GET erwartet'], 405);
             $config = $cm->getAppConfig();
             $tokenStore = new TokenStore($config['token_store']['path']);
+            require_once __DIR__ . '/../calendar/api-functions.php';
             $status = [];
+            $stale = [];
             foreach ($config['calendar_sources'] as $src) {
                 $status[$src['id']] = $tokenStore->has($src['id']);
+                // Rein lesend: kein Token-Refresh beim Pollen des Status
+                $stale[$src['id']] = calApiIsConnectionStale($src, $tokenStore);
             }
-            jsonResponse(['status' => $status]);
+            jsonResponse(['status' => $status, 'stale' => $stale]);
             break;
 
         // ==================== Seitendesign ====================
