@@ -2,6 +2,8 @@
 
 require_once __DIR__ . '/TokenStore.php';
 require_once __DIR__ . '/CalendarServiceInterface.php';
+require_once __DIR__ . '/CalendarUnavailableException.php';
+require_once __DIR__ . '/SecurityHelper.php';
 require_once __DIR__ . '/MicrosoftCalendarService.php';
 require_once __DIR__ . '/GoogleCalendarService.php';
 require_once __DIR__ . '/AvailabilityEngine.php';
@@ -82,8 +84,20 @@ class BookingService
         $end = clone $start;
         $end->modify('+' . $this->config['app']['appointment_duration_minutes'] . ' minutes');
 
-        // Pruefen ob Slot noch verfuegbar (gezielter Check nur fuer diesen Zeitraum)
-        if (!$this->getAvailabilityEngine()->isSlotAvailable($start, $end)) {
+        // Pruefen ob Slot noch verfuegbar (gezielter Check nur fuer diesen Zeitraum).
+        // Ist der Kalender nicht abrufbar, wird NICHT gebucht – sonst koennte
+        // ein in Outlook bereits vergebener Termin doppelt belegt werden.
+        try {
+            $slotFree = $this->getAvailabilityEngine()->isSlotAvailable($start, $end);
+        } catch (CalendarUnavailableException $e) {
+            SecurityHelper::logError('Booking', 'Slot-Pruefung fehlgeschlagen: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Der Kalender ist derzeit nicht erreichbar. Bitte versuchen Sie es in Kürze erneut.',
+            ];
+        }
+
+        if (!$slotFree) {
             return ['success' => false, 'message' => 'Dieser Zeitslot ist leider nicht mehr verfügbar.'];
         }
 

@@ -211,22 +211,31 @@ function fetchMicrosoftEvents(string $accessToken, string $timezone, string $sta
 {
     $calPath = '';
     if (!empty($calendarId) && $calendarId !== 'primary') {
-        $calPath = '/calendars/' . urlencode($calendarId);
+        $calPath = '/calendars/' . rawurlencode($calendarId);
     }
 
+    // Graph interpretiert start/endDateTime ohne Zeitzonen-Offset als UTC.
+    // Das Frontend sendet lokale Zeiten ("2026-08-12T00:00:00"), deshalb hier
+    // in RFC3339 mit Offset umwandeln – sonst ist das Zeitfenster um den
+    // UTC-Versatz verschoben (in Europe/Berlin 1–2 Stunden).
     $params = http_build_query([
-        'startDateTime' => $start,
-        'endDateTime' => $end,
+        'startDateTime' => toRfc3339($start, $timezone),
+        'endDateTime' => toRfc3339($end, $timezone),
         '$select' => 'subject,start,end,location,isAllDay,showAs,categories,isCancelled,organizer',
         '$top' => 500,
         '$orderby' => 'start/dateTime',
     ]);
 
     $url = "https://graph.microsoft.com/v1.0/me{$calPath}/calendarView?{$params}";
-    $data = graphGet($url, $accessToken, $timezone);
     $events = [];
+    $page = 0;
 
-    if (isset($data['value'])) {
+    while ($url !== '' && $page < 20) {
+        $data = graphGet($url, $accessToken, $timezone);
+        if (!isset($data['value'])) {
+            break;
+        }
+
         foreach ($data['value'] as $event) {
             if (!empty($event['isCancelled'])) {
                 continue;
@@ -243,6 +252,10 @@ function fetchMicrosoftEvents(string $accessToken, string $timezone, string $sta
                 'categories' => $event['categories'] ?? [],
             ];
         }
+
+        // Weitere Seiten nachladen, damit in vollen Wochen keine Termine fehlen
+        $url = $data['@odata.nextLink'] ?? '';
+        $page++;
     }
 
     return $events;

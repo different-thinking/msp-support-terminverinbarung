@@ -77,10 +77,21 @@ if (isset($_GET['msg'])) {
     }
 }
 
-// Kalender-Verbindungsstatus
+// Kalender-Verbindungsstatus.
+// Ein vorhandenes Token heisst noch nicht, dass die Verbindung lebt: Nach
+// Passwortwechsel, Entzug der Zustimmung oder langer Inaktivitaet ist der
+// Refresh-Token tot. Deshalb wird hier zusaetzlich ein echter Token-Refresh
+// versucht – sonst zeigt das Admin "Verbunden", waehrend die Verfuegbarkeit
+// nicht mehr abgerufen werden kann.
+require_once __DIR__ . '/../calendar/api-functions.php';
+
 $calendarStatus = [];
+$calendarStale = [];
 foreach ($config['calendar_sources'] as $src) {
-    $calendarStatus[$src['id']] = $tokenStore->has($src['id']);
+    $hasToken = $tokenStore->has($src['id']);
+    $calendarStatus[$src['id']] = $hasToken;
+    $calendarStale[$src['id']] = $hasToken
+        && calApiGetValidAccessToken($src, $tokenStore) === null;
 }
 ?>
 <!DOCTYPE html>
@@ -489,6 +500,7 @@ foreach ($config['calendar_sources'] as $src) {
             <div id="calendar-sources-list">
                 <?php foreach ($config['calendar_sources'] as $src):
                     $isConnected = $calendarStatus[$src['id']] ?? false;
+                    $isStale = $calendarStale[$src['id']] ?? false;
                 ?>
                 <div class="admin-card calendar-source-card" data-id="<?= htmlspecialchars($src['id']) ?>">
                     <div class="card-header">
@@ -507,7 +519,11 @@ foreach ($config['calendar_sources'] as $src) {
                             </div>
                         </div>
                         <div>
-                            <?php if ($isConnected): ?>
+                            <?php if ($isConnected && $isStale): ?>
+                                <span class="status disconnected" title="Der Zugriff wurde von Microsoft/Google abgelehnt. Bitte neu verbinden.">
+                                    <span class="status-dot"></span> Verbindung abgelaufen
+                                </span>
+                            <?php elseif ($isConnected): ?>
                                 <span class="status connected"><span class="status-dot"></span> Verbunden</span>
                             <?php else: ?>
                                 <span class="status disconnected"><span class="status-dot"></span> Nicht verbunden</span>

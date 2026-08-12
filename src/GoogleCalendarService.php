@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/CalendarServiceInterface.php';
+require_once __DIR__ . '/CalendarUnavailableException.php';
 
 /**
  * Google Calendar Service über Google Calendar API v3.
@@ -105,7 +106,10 @@ class GoogleCalendarService implements CalendarServiceInterface
     {
         $accessToken = $this->getValidAccessToken();
         if (!$accessToken) {
-            return [];
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Google-Verbindung abgelaufen oder ungueltig – Free/Busy nicht abrufbar'
+            );
         }
 
         $calendarIds = [];
@@ -137,21 +141,43 @@ class GoogleCalendarService implements CalendarServiceInterface
 
     /**
      * Parsed eine Free/Busy-Response zu Busy-Slots.
+     *
+     * @throws CalendarUnavailableException bei unlesbarer oder fehlerhafter Response
      */
     public function parseFreeBusyResponse(string $response): array
     {
-        $data = json_decode($response, true) ?: [];
-        $busySlots = [];
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Calendar-API-Antwort');
+        }
+        if (isset($data['error'])) {
+            throw new CalendarUnavailableException(
+                $this->sourceId,
+                'Calendar-API-Fehler: ' . ($data['error']['message'] ?? 'unbekannt')
+            );
+        }
+        if (!isset($data['calendars']) || !is_array($data['calendars'])) {
+            throw new CalendarUnavailableException($this->sourceId, 'Antwort ohne Free/Busy-Daten');
+        }
 
-        if (isset($data['calendars'])) {
-            foreach ($data['calendars'] as $calData) {
-                if (isset($calData['busy'])) {
-                    foreach ($calData['busy'] as $busy) {
-                        $busySlots[] = [
-                            'start' => new \DateTime($busy['start']),
-                            'end' => new \DateTime($busy['end']),
-                        ];
-                    }
+        $busySlots = [];
+        foreach ($data['calendars'] as $calId => $calData) {
+            // Pro-Kalender-Fehler (z.B. notFound) duerfen nicht als "frei" gelten
+            if (!empty($calData['errors'])) {
+                $reason = $calData['errors'][0]['reason'] ?? 'unbekannt';
+                throw new CalendarUnavailableException(
+                    $this->sourceId,
+                    "Kalender '{$calId}' nicht abrufbar: {$reason}"
+                );
+            }
+            foreach ($calData['busy'] ?? [] as $busy) {
+                try {
+                    $busySlots[] = [
+                        'start' => new \DateTime($busy['start']),
+                        'end' => new \DateTime($busy['end']),
+                    ];
+                } catch (\Exception $e) {
+                    throw new CalendarUnavailableException($this->sourceId, 'Unlesbare Busy-Zeit');
                 }
             }
         }

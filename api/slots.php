@@ -59,8 +59,19 @@ try {
         default:
             jsonResponse(['error' => 'Unbekannte Aktion. Verwenden Sie ?action=days oder ?action=slots'], 400);
     }
+} catch (CalendarUnavailableException $e) {
+    // Kalender nicht abrufbar: KEINE Verfuegbarkeit ausliefern und nichts cachen.
+    // Ein leeres/optimistisches Ergebnis wuerde in Outlook belegte Zeiten
+    // als frei anzeigen.
+    error_log('Slots API – Kalender nicht erreichbar: ' . $e->getMessage());
+    header('Cache-Control: no-store');
+    jsonResponse([
+        'error' => 'calendar_unavailable',
+        'message' => 'Die Kalender-Verbindung ist derzeit nicht verfügbar. Bitte versuchen Sie es in Kürze erneut.',
+    ], 503);
 } catch (\Throwable $e) {
     error_log('Slots API Error: ' . $e->getMessage());
+    header('Cache-Control: no-store');
     jsonResponse(['error' => 'Interner Serverfehler'], 500);
 }
 

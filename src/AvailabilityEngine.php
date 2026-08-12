@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/CalendarServiceInterface.php';
+require_once __DIR__ . '/CalendarUnavailableException.php';
 require_once __DIR__ . '/SecurityHelper.php';
 
 /**
@@ -254,19 +255,35 @@ class AvailabilityEngine
 
     /**
      * Sammelt Busy-Slots aus allen Kalender-Quellen parallel via curl_multi.
+     *
+     * Fail-Closed: Schlaegt auch nur eine Quelle fehl (abgelaufene Verbindung,
+     * API- oder Netzwerkfehler), wird eine CalendarUnavailableException geworfen.
+     * Ein leeres Busy-Ergebnis wuerde sonst bedeuten "der ganze Tag ist frei" –
+     * und die Webseite wuerde bereits in Outlook vergebene Zeiten anbieten.
+     *
+     * @throws CalendarUnavailableException
      */
     private function collectBusySlots(\DateTime $start, \DateTime $end): array
     {
         // Alle curl-Handles + zugehörige Services sammeln
         $requests = [];
-        foreach ($this->calendarServices as $service) {
-            $handles = $service->prepareFreeBusyCurl($start, $end);
-            foreach ($handles as $entry) {
-                $requests[] = [
-                    'handle' => $entry['handle'],
-                    'service' => $service,
-                ];
+        try {
+            foreach ($this->calendarServices as $service) {
+                $handles = $service->prepareFreeBusyCurl($start, $end);
+                foreach ($handles as $entry) {
+                    $requests[] = [
+                        'handle' => $entry['handle'],
+                        'service' => $service,
+                    ];
+                }
             }
+        } catch (CalendarUnavailableException $e) {
+            // Bereits erzeugte Handles nicht liegen lassen
+            foreach ($requests as $req) {
+                curl_close($req['handle']);
+            }
+            SecurityHelper::logError('Availability', $e->getMessage());
+            throw $e;
         }
 
         if (empty($requests)) {
@@ -277,13 +294,13 @@ class AvailabilityEngine
         if (count($requests) === 1) {
             $req = $requests[0];
             $response = curl_exec($req['handle']);
-            if ($response === false) {
-                SecurityHelper::logError('Availability', 'Free/Busy curl error: ' . curl_error($req['handle']));
-                curl_close($req['handle']);
-                return [];
-            }
+            $error = curl_error($req['handle']);
+            $httpCode = (int)curl_getinfo($req['handle'], CURLINFO_HTTP_CODE);
             curl_close($req['handle']);
-            return $req['service']->parseFreeBusyResponse($response);
+
+            $this->assertFreeBusyOk($req['service'], $response, $error, $httpCode);
+
+            return $this->parseChecked($req['service'], (string)$response);
         }
 
         // Parallel ausfuehren
@@ -299,28 +316,63 @@ class AvailabilityEngine
             }
         } while ($active && $status === CURLM_OK);
 
-        // Ergebnisse sammeln und parsen
-        $allBusy = [];
+        // Erst alle Antworten einsammeln, dann aufraeumen – so bleiben bei
+        // einem Fehler keine Handles offen.
+        $responses = [];
         foreach ($requests as $req) {
-            $errno = curl_errno($req['handle']);
-            if ($errno !== 0) {
-                SecurityHelper::logError('Availability', 'Free/Busy curl_multi error: ' . curl_error($req['handle']));
-                curl_multi_remove_handle($mh, $req['handle']);
-                curl_close($req['handle']);
-                continue;
-            }
-            $response = curl_multi_getcontent($req['handle']);
-            $allBusy = array_merge(
-                $allBusy,
-                $req['service']->parseFreeBusyResponse($response ?: '')
-            );
+            $responses[] = [
+                'service' => $req['service'],
+                'body' => curl_errno($req['handle']) === 0 ? curl_multi_getcontent($req['handle']) : false,
+                'error' => curl_error($req['handle']),
+                'http_code' => (int)curl_getinfo($req['handle'], CURLINFO_HTTP_CODE),
+            ];
             curl_multi_remove_handle($mh, $req['handle']);
             curl_close($req['handle']);
         }
-
         curl_multi_close($mh);
 
+        $allBusy = [];
+        foreach ($responses as $res) {
+            $this->assertFreeBusyOk($res['service'], $res['body'], $res['error'], $res['http_code']);
+            $allBusy = array_merge($allBusy, $this->parseChecked($res['service'], (string)$res['body']));
+        }
+
         return $allBusy;
+    }
+
+    /**
+     * Prueft Transport- und HTTP-Ebene einer Free/Busy-Antwort.
+     *
+     * @param string|bool $response
+     * @throws CalendarUnavailableException
+     */
+    private function assertFreeBusyOk(CalendarServiceInterface $service, $response, string $error, int $httpCode): void
+    {
+        if ($response === false || $response === null) {
+            $e = new CalendarUnavailableException($service->getSourceId(), 'Netzwerkfehler: ' . $error);
+            SecurityHelper::logError('Availability', $e->getMessage());
+            throw $e;
+        }
+        if ($httpCode >= 400) {
+            $e = new CalendarUnavailableException($service->getSourceId(), "HTTP {$httpCode} bei Free/Busy-Abfrage");
+            SecurityHelper::logError('Availability', $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Parsed eine Antwort und protokolliert Fehler vor dem Weiterwerfen.
+     *
+     * @throws CalendarUnavailableException
+     */
+    private function parseChecked(CalendarServiceInterface $service, string $response): array
+    {
+        try {
+            return $service->parseFreeBusyResponse($response);
+        } catch (CalendarUnavailableException $e) {
+            SecurityHelper::logError('Availability', $e->getMessage());
+            throw $e;
+        }
     }
 
     /**

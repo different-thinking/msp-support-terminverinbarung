@@ -21,6 +21,7 @@
         attendees: [],
         loading: false,
         loadError: false,
+        slotsError: false,
         currentStep: 1,
     };
 
@@ -278,13 +279,20 @@
         container.innerHTML = '<div class="calendar-loading"><div class="spinner spinner-dark"></div></div>';
 
         fetch(`api/slots.php?action=slots&date=${date}`)
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 state.availableSlots = data.slots || [];
+                state.slotsError = false;
                 renderTimeSlots(date);
             })
             .catch(() => {
+                // Fehler nicht als "keine Termine" darstellen – sonst wirkt ein
+                // Kalender-Ausfall wie ein voller Tag (oder umgekehrt).
                 state.availableSlots = [];
+                state.slotsError = true;
                 renderTimeSlots(date);
             });
     }
@@ -297,6 +305,19 @@
         const dateFormatted = `${parts[2]}.${parts[1]}.${parts[0]}`;
 
         let html = `<div class="time-slots-date">${dateFormatted}</div>`;
+
+        if (state.slotsError) {
+            html += '<div class="time-slots-empty">Die Verfügbarkeit konnte nicht geladen werden.</div>';
+            html += '<div style="text-align:center;margin-top:8px;">'
+                + '<button type="button" class="btn btn-secondary btn-sm" id="btn-retry-slots">Erneut versuchen</button>'
+                + '</div>';
+            container.innerHTML = html;
+            const retryBtn = container.querySelector('#btn-retry-slots');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', () => loadTimeSlots(date));
+            }
+            return;
+        }
 
         if (state.availableSlots.length === 0) {
             html += '<div class="time-slots-empty">Keine verfügbaren Zeitslots an diesem Tag.</div>';
